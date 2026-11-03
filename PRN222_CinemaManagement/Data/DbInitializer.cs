@@ -157,5 +157,119 @@ public static class DbInitializer
             context.Seats.AddRange(seats);
             await context.SaveChangesAsync();
         }
+
+        // 4. Seed Sample Movie, Showtime và Đơn vé mẫu để test tra cứu & QR (UC-10, 11, 12, 14, 18, TEC-06)
+        if (!await context.Bookings.AnyAsync())
+        {
+            var movie = await context.Movies.FirstOrDefaultAsync();
+            if (movie == null)
+            {
+                movie = new Movie
+                {
+                    Title = "Mai (2024)",
+                    Description = "Phim điện ảnh tâm lý tình cảm gia đình.",
+                    DurationMinutes = 131,
+                    ReleaseDate = new DateOnly(2024, 2, 10),
+                    AgeRating = "T18",
+                    Status = "Showing"
+                };
+                context.Movies.Add(movie);
+                await context.SaveChangesAsync();
+            }
+
+            var auditorium = await context.Auditoriums.FirstOrDefaultAsync();
+            if (auditorium != null)
+            {
+                var showtime = await context.Showtimes.FirstOrDefaultAsync(s => s.AuditoriumId == auditorium.AuditoriumId);
+                if (showtime == null)
+                {
+                    showtime = new Showtime
+                    {
+                        MovieId = movie.MovieId,
+                        AuditoriumId = auditorium.AuditoriumId,
+                        StartAt = DateTime.UtcNow.AddDays(1).Date.AddHours(19), // 19:00 ngày mai
+                        EndAt = DateTime.UtcNow.AddDays(1).Date.AddHours(21).AddMinutes(30),
+                        BasePrice = 80000m,
+                        Status = "Scheduled"
+                    };
+                    context.Showtimes.Add(showtime);
+                    await context.SaveChangesAsync();
+                }
+
+                // Kiểm tra ShowtimeSeats
+                var showtimeSeats = await context.ShowtimeSeats
+                    .Where(ss => ss.ShowtimeId == showtime.ShowtimeId)
+                    .ToListAsync();
+
+                if (!showtimeSeats.Any())
+                {
+                    var physSeats = await context.Seats
+                        .Where(s => s.AuditoriumId == auditorium.AuditoriumId)
+                        .OrderBy(s => s.RowLabel).ThenBy(s => s.SeatNumber)
+                        .Take(10)
+                        .ToListAsync();
+
+                    showtimeSeats = physSeats.Select(ps => new ShowtimeSeat
+                    {
+                        ShowtimeId = showtime.ShowtimeId,
+                        AuditoriumId = auditorium.AuditoriumId,
+                        SeatId = ps.SeatId,
+                        Price = 80000m,
+                        Status = "Available"
+                    }).ToList();
+
+                    context.ShowtimeSeats.AddRange(showtimeSeats);
+                    await context.SaveChangesAsync();
+                }
+
+                // Tạo 1 đơn booking mẫu cho Customer (Nguyễn Văn A)
+                var customer = await context.Customers.Include(c => c.User).FirstOrDefaultAsync();
+                if (customer != null && showtimeSeats.Count >= 2)
+                {
+                    var booking = new Booking
+                    {
+                        BookingCode = "BK-20261103-DEMO01",
+                        CustomerId = customer.CustomerId,
+                        ShowtimeId = showtime.ShowtimeId,
+                        BookingDate = DateTime.UtcNow,
+                        ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+                        TotalAmount = 160000m,
+                        BookingChannel = "Online",
+                        Status = "Confirmed"
+                    };
+                    context.Bookings.Add(booking);
+                    await context.SaveChangesAsync();
+
+                    // Đánh dấu 2 ghế này đã bán (Sold)
+                    showtimeSeats[0].Status = "Sold";
+                    showtimeSeats[1].Status = "Sold";
+
+                    // Tạo 2 vé điện tử tương ứng
+                    context.Tickets.Add(new Ticket
+                    {
+                        BookingId = booking.BookingId,
+                        ShowtimeId = showtime.ShowtimeId,
+                        ShowtimeSeatId = showtimeSeats[0].ShowtimeSeatId,
+                        TicketCode = "TK-MAI-A1-8899",
+                        Price = 80000m,
+                        Status = "Valid",
+                        IssuedAt = DateTime.UtcNow
+                    });
+
+                    context.Tickets.Add(new Ticket
+                    {
+                        BookingId = booking.BookingId,
+                        ShowtimeId = showtime.ShowtimeId,
+                        ShowtimeSeatId = showtimeSeats[1].ShowtimeSeatId,
+                        TicketCode = "TK-MAI-A2-8899",
+                        Price = 80000m,
+                        Status = "Valid",
+                        IssuedAt = DateTime.UtcNow
+                    });
+
+                    await context.SaveChangesAsync();
+                }
+            }
+        }
     }
 }

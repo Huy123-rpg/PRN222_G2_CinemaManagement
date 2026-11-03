@@ -1,0 +1,148 @@
+@model PRN222_CinemaManagement.Models.ViewModels.StaffLookupViewModel
+
+@{
+    ViewData["Title"] = "Tra cứu vé & Soát vé";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Tra cứu đơn vé & Soát vé vào rạp (UC-14, UC-18, TEC-06)</h3>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Cột 1: Soát vé nhanh (Check-in QR code) -->
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold">Soát vé vào rạp (Check-in QR - TEC-06)</h5>
+                <small class="text-muted">Nhập hoặc quét mã vé từ mã QR của khách hàng</small>
+            </div>
+            <div class="card-body">
+                <form asp-action="CheckInTicket" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Mã vé điện tử (Ticket Code):</label>
+                        <div class="input-group">
+                            <input type="text" name="ticketCode" class="form-control" placeholder="Ví dụ: TK-MAI-A1-8899" required autofocus />
+                            <button type="submit" class="btn btn-success">Soát vé</button>
+                        </div>
+                        <small class="text-muted">Nhân viên quét mã QR trên vé của khách sẽ tự động điền mã vào đây.</small>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột 2: Ô tìm kiếm đơn đặt vé (UC-18) -->
+    <div class="col-md-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold">Tra cứu đơn vé của khách (UC-18)</h5>
+                <small class="text-muted">Tìm kiếm theo Mã đơn, Mã vé, Số điện thoại hoặc Tên khách</small>
+            </div>
+            <div class="card-body">
+                <form method="get" asp-action="StaffLookup">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Từ khóa tìm kiếm:</label>
+                        <div class="input-group">
+                            <input type="text" name="searchKeyword" class="form-control" value="@Model.SearchKeyword" placeholder="Nhập mã đơn, mã vé, SĐT, hoặc tên..." />
+                            <button type="submit" class="btn btn-primary">Tìm kiếm</button>
+                            @if (!string.IsNullOrEmpty(Model.SearchKeyword))
+                            {
+                                <a asp-action="StaffLookup" class="btn btn-outline-secondary">Xóa tìm</a>
+                            }
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bảng kết quả tìm kiếm các đơn vé -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold">Kết quả tra cứu đơn vé (@Model.Bookings.Count đơn)</h5>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-bordered table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã đơn</th>
+                    <th>Khách hàng</th>
+                    <th>Số điện thoại</th>
+                    <th>Phim & Suất chiếu</th>
+                    <th>Ghế</th>
+                    <th>Trạng thái</th>
+                    <th class="text-center" style="width: 200px;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Bookings.Any())
+                {
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            Không tìm thấy đơn vé nào phù hợp với từ khóa.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var b in Model.Bookings)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@b.BookingCode</strong><br />
+                                <small class="text-muted">@b.BookingDate.ToString("dd/MM/yyyy HH:mm")</small>
+                            </td>
+                            <td>@(b.Customer != null ? b.Customer.User.FullName : "Khách vãng lai")</td>
+                            <td>@(b.Customer != null ? b.Customer.User.PhoneNumber : "N/A")</td>
+                            <td>
+                                <strong class="text-primary">@b.Showtime.Movie.Title</strong><br />
+                                <small class="text-muted">@b.Showtime.StartAt.ToString("dd/MM HH:mm") | @b.Showtime.Auditorium.Name</small>
+                            </td>
+                            <td>
+                                @foreach (var t in b.Tickets)
+                                {
+                                    <span class="badge bg-light text-dark border me-1">
+                                        @t.ShowtimeSeat.Seat.RowLabel@t.ShowtimeSeat.Seat.SeatNumber
+                                        (@(t.Status == "CheckedIn" ? "Đã vào" : (t.Status == "Cancelled" ? "Đã hủy" : "Hợp lệ")))
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                @if (b.Status == "Confirmed")
+                                {
+                                    <span class="badge bg-success">Đã thanh toán</span>
+                                }
+                                else if (b.Status == "Cancelled")
+                                {
+                                    <span class="badge bg-secondary">Đã hủy</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">@b.Status</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <a asp-action="Details" asp-route-id="@b.BookingId" class="btn btn-sm btn-outline-primary me-1">
+                                    Chi tiết & QR
+                                </a>
+
+                                @if (b.Status != "Cancelled")
+                                {
+                                    <form asp-action="StaffCancelBooking" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="bookingId" value="@b.BookingId" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn có chắc muốn hủy đơn vé này cho khách tại quầy không? Ghế sẽ được hoàn trả lại rạp.');">
+                                            Hủy vé
+                                        </button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
