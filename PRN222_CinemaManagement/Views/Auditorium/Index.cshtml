@@ -1,96 +1,75 @@
-@model IEnumerable<PRN222_CinemaManagement.Models.ViewModels.AuditoriumListItemViewModel>
+@model IEnumerable<PRN222_CinemaManagement.Models.Entities.Auditorium>
 
 @{
     ViewData["Title"] = "Quản lý phòng chiếu";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-1">Quản lý phòng chiếu</h2>
-        <p class="text-muted mb-0">Cấu hình phòng chiếu, bố trí sơ đồ ghế và trạng thái hoạt động (UC-25 & UC-26)</p>
-    </div>
-    <a asp-action="Create" class="btn btn-primary">
-        + Thêm phòng chiếu mới
-    </a>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Quản lý phòng chiếu (UC-25)</h3>
+    <a asp-action="Create" class="btn btn-primary btn-sm">+ Thêm phòng chiếu mới</a>
 </div>
 
 <div class="card shadow-sm border-0">
     <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
+        <table class="table table-bordered table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 60px;">Mã</th>
+                    <th>Tên phòng</th>
+                    <th>Kích thước</th>
+                    <th>Tổng số ghế</th>
+                    <th>Trạng thái</th>
+                    <th style="width: 260px;" class="text-center">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
                     <tr>
-                        <th class="ps-3" style="width: 80px;">Mã</th>
-                        <th>Tên phòng</th>
-                        <th>Kích thước</th>
-                        <th>Số lượng ghế</th>
-                        <th>Phân loại ghế</th>
-                        <th>Trạng thái</th>
-                        <th class="text-end pe-3" style="width: 280px;">Thao tác</th>
+                        <td colspan="6" class="text-center text-muted py-3">Chưa có phòng chiếu nào.</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @if (!Model.Any())
+                }
+                else
+                {
+                    @foreach (var item in Model)
                     {
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">
-                                Chưa có phòng chiếu nào trong hệ thống. Hãy bấm <strong>+ Thêm phòng chiếu mới</strong>.
+                            <td>#@item.AuditoriumId</td>
+                            <td><strong>@item.Name</strong></td>
+                            <td>@item.TotalRows hàng × @item.TotalColumns cột</td>
+                            <td>@item.Seats.Count ghế</td>
+                            <td>
+                                @if (item.Status == "Active")
+                                {
+                                    <span class="badge bg-success">Hoạt động</span>
+                                }
+                                else if (item.Status == "Maintenance")
+                                {
+                                    <span class="badge bg-warning text-dark">Bảo trì</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Ngừng dùng</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <a asp-action="ConfigureSeats" asp-route-id="@item.AuditoriumId" class="btn btn-sm btn-outline-primary me-1">
+                                    Sơ đồ ghế
+                                </a>
+                                <a asp-action="Edit" asp-route-id="@item.AuditoriumId" class="btn btn-sm btn-outline-secondary me-1">
+                                    Sửa
+                                </a>
+                                <form asp-action="ToggleStatus" asp-route-id="@item.AuditoriumId" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Bạn có chắc muốn đổi trạng thái phòng này?');">
+                                        @(item.Status == "Active" ? "Bảo trì" : "Kích hoạt")
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     }
-                    else
-                    {
-                        @foreach (var item in Model)
-                        {
-                            <tr>
-                                <td class="ps-3 fw-bold text-muted">#@item.AuditoriumId</td>
-                                <td class="fw-bold">@item.Name</td>
-                                <td>
-                                    <span class="badge bg-light text-dark border">
-                                        @item.TotalRows hàng × @item.TotalColumns cột
-                                    </span>
-                                </td>
-                                <td>
-                                    <strong>@item.ActiveSeatsCount</strong> / @item.TotalSeats ghế hoạt động
-                                </td>
-                                <td>
-                                    <span class="badge bg-secondary me-1">Standard: @(item.ActiveSeatsCount - item.VipSeatsCount - item.CoupleSeatsCount)</span>
-                                    <span class="badge bg-warning text-dark me-1">VIP: @item.VipSeatsCount</span>
-                                    <span class="badge bg-danger">Couple: @item.CoupleSeatsCount</span>
-                                </td>
-                                <td>
-                                    @if (item.Status == "Active")
-                                    {
-                                        <span class="badge bg-success">Đang hoạt động</span>
-                                    }
-                                    else if (item.Status == "Maintenance")
-                                    {
-                                        <span class="badge bg-warning text-dark">Bảo trì</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-secondary">Ngừng hoạt động</span>
-                                    }
-                                </td>
-                                <td class="text-end pe-3">
-                                    <a asp-action="ConfigureSeats" asp-route-id="@item.AuditoriumId" class="btn btn-sm btn-outline-primary me-1" title="Xem sơ đồ và cấu hình loại ghế">
-                                        Sơ đồ ghế
-                                    </a>
-                                    <a asp-action="Edit" asp-route-id="@item.AuditoriumId" class="btn btn-sm btn-outline-secondary me-1" title="Chỉnh sửa thông tin phòng">
-                                        Sửa
-                                    </a>
-                                    <form asp-action="ToggleStatus" asp-route-id="@item.AuditoriumId" method="post" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Đổi trạng thái phòng" onclick="return confirm('Bạn có chắc muốn đổi trạng thái phòng chiếu này?');">
-                                            @(item.Status == "Active" ? "Bảo trì" : "Kích hoạt")
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
+                }
+            </tbody>
+        </table>
     </div>
 </div>

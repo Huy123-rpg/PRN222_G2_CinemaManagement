@@ -9,34 +9,20 @@ namespace PRN222_CinemaManagement.Controllers;
 [SessionAuthorize(Roles = "CinemaManager,Admin")]
 public class PricingController(CinemaDbContext context) : Controller
 {
-    // GET: /Pricing (UC-27 - Quản lý loại ghế & Bảng tính giá vé)
+    // 1. GET: /Pricing - Xem danh sách loại ghế & bảng tính giá mô phỏng (UC-27)
     [HttpGet]
-    public async Task<IActionResult> Index(decimal? samplePrice)
+    public async Task<IActionResult> Index(decimal? sampleBasePrice)
     {
         var seatTypes = await context.SeatTypes
             .Include(st => st.Seats)
             .OrderBy(st => st.SeatTypeId)
-            .Select(st => new SeatTypeItemViewModel
-            {
-                SeatTypeId = st.SeatTypeId,
-                TypeName = st.TypeName,
-                Description = st.Description,
-                PriceMultiplier = st.PriceMultiplier,
-                IsActive = st.IsActive,
-                TotalSeatsInSystem = st.Seats.Count
-            })
             .ToListAsync();
 
-        var model = new PricingIndexViewModel
-        {
-            SeatTypes = seatTypes,
-            SampleBasePrice = samplePrice ?? 80000m
-        };
-
-        return View(model);
+        ViewBag.SampleBasePrice = sampleBasePrice ?? 80000m;
+        return View(seatTypes);
     }
 
-    // GET: /Pricing/EditSeatType/{id}
+    // 2. GET: /Pricing/EditSeatType/{id} - Màn hình sửa hệ số giá (UC-27)
     [HttpGet]
     public async Task<IActionResult> EditSeatType(int id)
     {
@@ -59,7 +45,7 @@ public class PricingController(CinemaDbContext context) : Controller
         return View(model);
     }
 
-    // POST: /Pricing/EditSeatType/{id} (UC-27 - Thiết lập hệ số giá vé & Cấu hình loại ghế)
+    // 3. POST: /Pricing/EditSeatType - Lưu hệ số giá mới (UC-27)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EditSeatType(EditSeatTypeViewModel model)
@@ -76,22 +62,14 @@ public class PricingController(CinemaDbContext context) : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        string trimmedName = model.TypeName.Trim();
-        bool nameExists = await context.SeatTypes.AnyAsync(st => st.SeatTypeId != model.SeatTypeId && st.TypeName.ToLower() == trimmedName.ToLower());
-        if (nameExists)
-        {
-            ModelState.AddModelError("TypeName", "Tên loại ghế đã tồn tại.");
-            return View(model);
-        }
-
-        seatType.TypeName = trimmedName;
+        seatType.TypeName = model.TypeName.Trim();
         seatType.Description = model.Description?.Trim();
         seatType.PriceMultiplier = model.PriceMultiplier;
         seatType.IsActive = model.IsActive;
 
         await context.SaveChangesAsync();
 
-        TempData["SuccessMessage"] = $"Đã cập nhật loại ghế '{seatType.TypeName}' với hệ số giá {seatType.PriceMultiplier}x thành công!";
+        TempData["SuccessMessage"] = $"Đã cập nhật hệ số giá cho '{seatType.TypeName}' thành công!";
         return RedirectToAction(nameof(Index));
     }
 }

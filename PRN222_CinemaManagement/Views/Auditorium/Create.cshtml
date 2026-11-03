@@ -1,74 +1,56 @@
 @model PRN222_CinemaManagement.Models.ViewModels.AuditoriumCreateViewModel
 
 @{
-    ViewData["Title"] = "Thêm phòng chiếu mới";
-    var seatTypes = ViewBag.SeatTypes as IEnumerable<PRN222_CinemaManagement.Models.Entities.SeatType>;
+    ViewData["Title"] = "Thêm phòng chiếu";
 }
 
 <div class="row justify-content-center">
-    <div class="col-md-7">
+    <div class="col-md-6">
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-white py-3 border-bottom">
-                <h4 class="mb-0 fw-bold">Thêm phòng chiếu mới (UC-25)</h4>
-                <small class="text-muted">Nhập thông tin cơ bản và kích thước để hệ thống tự động sinh sơ đồ ghế</small>
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold">Thêm phòng chiếu mới (UC-25)</h5>
             </div>
-            <div class="card-body p-4">
+            <div class="card-body">
                 <form asp-action="Create" method="post">
                     @Html.AntiForgeryToken()
                     <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
                     <div class="mb-3">
-                        <label asp-for="Name" class="form-label fw-semibold"></label>
-                        <input asp-for="Name" class="form-control" placeholder="Ví dụ: Phòng chiếu 02" />
+                        <label asp-for="Name" class="form-label fw-bold"></label>
+                        <input asp-for="Name" class="form-control" placeholder="Ví dụ: Phòng chiếu 2" />
                         <span asp-validation-for="Name" class="text-danger"></span>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label asp-for="TotalRows" class="form-label fw-semibold"></label>
+                            <label asp-for="TotalRows" class="form-label fw-bold"></label>
                             <input asp-for="TotalRows" class="form-control" type="number" min="1" max="26" />
-                            <small class="text-muted">Từ 1 đến 26 hàng (tương ứng hàng A đến Z)</small>
-                            <span asp-validation-for="TotalRows" class="text-danger d-block"></span>
+                            <small class="text-muted">Từ 1 đến 26 hàng (A - Z)</small>
+                            <span asp-validation-for="TotalRows" class="text-danger"></span>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label asp-for="TotalColumns" class="form-label fw-semibold"></label>
-                            <input asp-for="TotalColumns" class="form-control" type="number" min="1" max="30" />
-                            <small class="text-muted">Từ 1 đến 30 ghế mỗi hàng</small>
-                            <span asp-validation-for="TotalColumns" class="text-danger d-block"></span>
+                            <label asp-for="TotalColumns" class="form-label fw-bold"></label>
+                            <input asp-for="TotalColumns" class="form-control" type="number" min="1" max="20" />
+                            <small class="text-muted">Số ghế mỗi hàng</small>
+                            <span asp-validation-for="TotalColumns" class="text-danger"></span>
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label asp-for="DefaultSeatTypeId" class="form-label fw-semibold"></label>
-                            <select asp-for="DefaultSeatTypeId" class="form-select">
-                                @if (seatTypes != null)
-                                {
-                                    @foreach (var st in seatTypes)
-                                    {
-                                        <option value="@st.SeatTypeId">@st.TypeName (Hệ số: @st.PriceMultiplier x)</option>
-                                    }
-                                }
-                            </select>
-                            <small class="text-muted">Loại ghế được áp dụng mặc định cho tất cả ghế ban đầu</small>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label asp-for="Status" class="form-label fw-semibold"></label>
-                            <select asp-for="Status" class="form-select">
-                                <option value="Active">Đang hoạt động (Active)</option>
-                                <option value="Maintenance">Đang bảo trì (Maintenance)</option>
-                                <option value="Inactive">Ngừng sử dụng (Inactive)</option>
-                            </select>
-                        </div>
+                    <div class="mb-3">
+                        <label asp-for="Status" class="form-label fw-bold"></label>
+                        <select asp-for="Status" class="form-select">
+                            <option value="Active">Hoạt động (Active)</option>
+                            <option value="Maintenance">Bảo trì (Maintenance)</option>
+                        </select>
                     </div>
 
-                    <div class="alert alert-info py-2 small mb-4">
-                        💡 <strong>Lưu ý:</strong> Sau khi tạo phòng, hệ thống sẽ tự động khởi tạo ma trận sơ đồ ghế. Bạn sẽ được chuyển trực tiếp đến trang <strong>Cấu hình sơ đồ ghế</strong> để điều chỉnh các hàng ghế VIP, ghế đôi hoặc ghế hỏng.
+                    <div class="alert alert-secondary py-2 small">
+                        Hệ thống sẽ tự động tạo ma trận ghế ban đầu. Sau khi tạo xong, bạn có thể chỉnh loại ghế (VIP, Couple) trực tiếp trên sơ đồ.
                     </div>
 
-                    <div class="d-flex justify-content-between pt-2">
-                        <a asp-action="Index" class="btn btn-outline-secondary">Quay lại danh sách</a>
-                        <button type="submit" class="btn btn-primary px-4">Tạo phòng chiếu & Sinh ghế</button>
+                    <div class="d-flex justify-content-between mt-3">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Hủy</a>
+                        <button type="submit" class="btn btn-primary">Tạo phòng chiếu</button>
                     </div>
                 </form>
             </div>
