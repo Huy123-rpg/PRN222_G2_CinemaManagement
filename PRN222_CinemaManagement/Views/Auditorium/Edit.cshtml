@@ -1,0 +1,59 @@
+@model PRN222_CinemaManagement.Models.ViewModels.AuditoriumEditViewModel
+
+@{
+    ViewData["Title"] = "Chỉnh sửa phòng chiếu";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h4 class="mb-0 fw-bold">Chỉnh sửa phòng chiếu: @Model.Name</h4>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Edit" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="AuditoriumId" />
+                    <input type="hidden" asp-for="TotalRows" />
+                    <input type="hidden" asp-for="TotalColumns" />
+                    <input type="hidden" asp-for="HasShowtimes" />
+
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="Name" class="form-label fw-semibold"></label>
+                        <input asp-for="Name" class="form-control" />
+                        <span asp-validation-for="Name" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Quy mô hiện tại</label>
+                        <input type="text" class="form-control bg-light" readonly value="@Model.TotalRows hàng × @Model.TotalColumns cột" />
+                        <small class="text-muted">Để bảo toàn tính toàn vẹn của các suất chiếu và vé đã bán, kích thước số hàng và cột không được thay đổi sau khi tạo.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Status" class="form-label fw-semibold"></label>
+                        <select asp-for="Status" class="form-select">
+                            <option value="Active">Đang hoạt động (Active)</option>
+                            <option value="Maintenance">Đang bảo trì (Maintenance)</option>
+                            <option value="Inactive">Ngừng sử dụng (Inactive)</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-between pt-3">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <div>
+                            <a asp-action="ConfigureSeats" asp-route-id="@Model.AuditoriumId" class="btn btn-outline-primary me-2">Cấu hình sơ đồ ghế</a>
+                            <button type="submit" class="btn btn-primary px-4">Lưu cập nhật</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
