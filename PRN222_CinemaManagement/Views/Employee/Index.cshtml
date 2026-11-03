@@ -1,0 +1,127 @@
+@model EmployeeListViewModel
+@{
+    ViewData["Title"] = "Quản lý nhân viên";
+    var roles = ViewBag.Roles as List<string> ?? new List<string>();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Quản lý nhân viên</h3>
+    <a asp-action="Create" class="btn btn-primary btn-sm">Thêm nhân viên mới</a>
+</div>
+
+<!-- Bộ lọc tự động (Tự lọc tức thì khi nhập hoặc chọn, không cần bấm nút) -->
+<div class="row g-2 align-items-center mb-3">
+    <div class="col-md-6">
+        <input type="text" id="searchInput" class="form-control form-control-sm"
+               placeholder="Tìm theo tên, username, email, mã NV..." oninput="filterTable()" />
+    </div>
+    <div class="col-md-3">
+        <select id="roleSelect" class="form-select form-select-sm" onchange="filterTable()">
+            <option value="">-- Tất cả vai trò --</option>
+            @foreach (var r in roles)
+            {
+                <option value="@r">@r</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select id="statusSelect" class="form-select form-select-sm" onchange="filterTable()">
+            <option value="">-- Tất cả trạng thái --</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+            <option value="Locked">Locked</option>
+        </select>
+    </div>
+</div>
+
+<!-- Bảng danh sách nhân viên -->
+<table class="table table-bordered table-hover align-middle">
+    <thead class="table-light">
+        <tr>
+            <th>Mã NV</th>
+            <th>Họ và Tên</th>
+            <th>Tên đăng nhập</th>
+            <th>Email</th>
+            <th>Điện thoại</th>
+            <th>Vai trò</th>
+            <th>Trạng thái</th>
+            <th class="text-center" style="width: 170px;">Thao tác</th>
+        </tr>
+    </thead>
+    <tbody id="employeeTableBody">
+        @if (Model.Employees.Any())
+        {
+            foreach (var emp in Model.Employees)
+            {
+                <tr class="emp-row"
+                    data-search="@emp.FullName @emp.Username @emp.Email @emp.EmployeeCode"
+                    data-role="@emp.RoleName"
+                    data-status="@emp.Status">
+                    <td>@emp.EmployeeCode</td>
+                    <td>@emp.FullName</td>
+                    <td>@emp.Username</td>
+                    <td>@emp.Email</td>
+                    <td>@(emp.PhoneNumber ?? "-")</td>
+                    <td>@emp.RoleName</td>
+                    <td>@emp.Status</td>
+                    <td class="text-center">
+                        <a asp-action="Edit" asp-route-id="@emp.UserId" class="btn btn-outline-primary btn-sm me-1">Sửa</a>
+                        @if (emp.RoleName != "Admin")
+                        {
+                            <form asp-action="ToggleStatus" asp-route-id="@emp.UserId" method="post" class="d-inline"
+                                  onsubmit="return confirm('Bạn có chắc muốn đổi trạng thái tài khoản này?');">
+                                @if (emp.Status == "Active")
+                                {
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">Khóa</button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="btn btn-outline-success btn-sm">Mở</button>
+                                }
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+        }
+        <tr id="noDataRow" style="display: none;">
+            <td colspan="8" class="text-center py-3 text-muted">
+                Không tìm thấy nhân viên nào phù hợp.
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+@section Scripts {
+    <script>
+        function filterTable() {
+            const search = document.getElementById('searchInput').value.toLowerCase().trim();
+            const role = document.getElementById('roleSelect').value;
+            const status = document.getElementById('statusSelect').value;
+            const rows = document.querySelectorAll('.emp-row');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const searchData = (row.getAttribute('data-search') || '').toLowerCase();
+                const roleData = row.getAttribute('data-role') || '';
+                const statusData = row.getAttribute('data-status') || '';
+
+                const matchSearch = !search || searchData.includes(search);
+                const matchRole = !role || roleData === role;
+                const matchStatus = !status || statusData === status;
+
+                if (matchSearch && matchRole && matchStatus) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            const noData = document.getElementById('noDataRow');
+            if (noData) {
+                noData.style.display = (visibleCount === 0) ? '' : 'none';
+            }
+        }
+    </script>
+}
