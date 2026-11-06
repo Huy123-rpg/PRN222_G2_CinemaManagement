@@ -1,0 +1,32 @@
+@model BookingDetailsViewModel
+<div class="card mb-4"><div class="card-body">
+    <h2 class="h5">@Model.MovieTitle</h2>
+    <p>@Model.Auditorium · @BookingDisplay.VietnamTime(Model.StartAt).ToString("HH:mm · dd/MM/yyyy") (giờ Việt Nam)</p>
+    <dl class="row mb-2">
+        <dt class="col-sm-4">Mã đặt vé</dt><dd class="col-sm-8"><code>@Model.BookingCode</code></dd>
+        <dt class="col-sm-4">Khách hàng</dt><dd class="col-sm-8">@Model.CustomerName</dd>
+        <dt class="col-sm-4">Email</dt><dd class="col-sm-8">@Model.Email</dd>
+        <dt class="col-sm-4">Trạng thái</dt><dd class="col-sm-8">@BookingDisplay.StatusText(Model.Status)</dd>
+    </dl>
+    @if (Model.Seats.Count > 0)
+    {
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <caption class="visually-hidden">Chi tiết giá ghế trong đơn</caption>
+                <thead><tr><th scope="col">Ghế</th><th scope="col">Loại ghế</th><th scope="col" class="text-end">Giá vé</th></tr></thead>
+                <tbody>
+                    @foreach (var seat in Model.Seats)
+                    {
+                        <tr><td>@seat.Label</td><td>@seat.SeatType</td><td class="text-end">@seat.Price.ToString("N0") đ</td></tr>
+                    }
+                </tbody>
+                <tfoot><tr><th colspan="2">Tổng tiền</th><th class="text-end">@Model.TotalAmount.ToString("N0") đ</th></tr></tfoot>
+            </table>
+        </div>
+    }
+    else
+    {
+        <p>Đơn này không còn ghế đang giữ.</p>
+        <p class="mb-0">Tổng tiền của đơn: <strong>@Model.TotalAmount.ToString("N0") đ</strong></p>
+    }
+</div></div>

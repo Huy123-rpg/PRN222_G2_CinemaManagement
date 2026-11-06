@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- QRCoder: sinh mã QR cho vé điện tử trong module đặt vé online. -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.33" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.33">
       <PrivateAssets>all</PrivateAssets>

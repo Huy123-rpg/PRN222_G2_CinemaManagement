@@ -1,0 +1,20 @@
+@model BookingDetailsViewModel
+@{ ViewData["Title"] = "Vé điện tử"; }
+<div class="alert alert-success"><h1 class="h4">Đặt vé thành công!</h1><p class="mb-0">Vé của bạn đã được xác nhận. Xuất trình mã QR tại rạp để kiểm tra vé.</p></div>
+<partial name="_BookingSummary" model="Model" />
+<h2 class="h4 mb-3">Vé điện tử của bạn</h2>
+<div class="row g-3">
+    @foreach (var ticket in Model.Tickets)
+    {
+        <div class="col-sm-6 col-lg-4">
+            <article class="card ticket-card h-100"><div class="card-body text-center">
+                <h3 class="h5">Ghế @ticket.SeatLabel</h3>
+                <img src="@Url.Action("TicketQr", new { id = ticket.TicketId })" class="ticket-qr" alt="Mã QR vé ghế @ticket.SeatLabel" width="220" height="220" />
+                <p class="small text-break mb-2"><code>@ticket.TicketCode</code></p>
+                <p>@ticket.Price.ToString("N0") đ · @(ticket.Status == "CheckedIn" ? "Đã sử dụng" : ticket.Status == "Cancelled" ? "Đã hủy" : "Hợp lệ")</p>
+                <a asp-action="TicketQr" asp-route-id="@ticket.TicketId" download="@(ticket.TicketCode + ".png")" class="btn btn-outline-primary btn-sm">Tải mã QR</a>
+            </div></article>
+        </div>
+    }
+</div>
+<div class="d-flex gap-3 mt-4"><a asp-action="MyBookings">Đơn đặt vé của tôi</a><a asp-controller="Movies" asp-action="Index">Tiếp tục xem phim</a></div>

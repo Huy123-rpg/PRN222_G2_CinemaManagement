@@ -1,0 +1,24 @@
+/* Phạm vi riêng cho màn hình đặt vé; không thay đổi giao diện quản trị tài khoản. */
+.movie-poster { height: 320px; object-fit: cover; }
+.movie-placeholder { display: grid; place-items: center; background: #192d46; color: #fff; font-weight: 800; letter-spacing: .3em; }
+.movie-description { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.movie-synopsis { white-space: pre-line; }
+.cinema-screen { background: #e8eef6; border-top: 5px solid #7a91ad; border-radius: 45% 45% 8px 8px; padding: 12px; text-align: center; letter-spacing: .3em; color: #34465e; }
+.seat-map-scroll { overflow-x: auto; padding: 5px 5px 16px; }
+.seat-map { display: flex; flex-direction: column; align-items: center; gap: 9px; min-width: max-content; }
+.seat-row { display: flex; align-items: center; gap: 8px; }
+.seat-row-label { width: 24px; font-weight: 700; text-align: center; }
+.seat-button { width: 48px; height: 46px; border: 2px solid #577c68; border-radius: 8px 8px 4px 4px; background: #f5fff8; color: #18452e; font-size: .8rem; font-weight: 600; }
+.seat-button small { display: block; font-size: .6rem; }
+.seat-button:focus-visible { outline: 3px solid #111; outline-offset: 3px; }
+.seat-button.mine, .seat-key.mine { background: #1459bf; color: #fff; border-color: #1459bf; }
+.seat-button.held, .seat-key.held { background: #ffe3a0; color: #634400; border-color: #b57d0d; }
+.seat-button.sold, .seat-key.sold { background: #b93248; color: #fff; border-color: #9b2638; }
+.seat-button.blocked, .seat-key.blocked { background: #ddd; color: #555; border-color: #8a8a8a; }
+.seat-button:disabled { cursor: not-allowed; }
+.seat-button.couple { width: 64px; }
+.seat-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; font-size: .85rem; }
+.seat-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.seat-key { width: 16px; height: 16px; display: inline-block; border: 1px solid #577c68; border-radius: 3px; background: #f5fff8; }
+.ticket-qr { max-width: 100%; height: auto; image-rendering: pixelated; }
+@media (max-width: 575px) { .seat-button { width: 40px; height: 43px; } .seat-row { gap: 5px; } }

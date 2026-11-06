@@ -1,0 +1,28 @@
+@model BookingDetailsViewModel
+@{ ViewData["Title"] = "Thanh toán giả lập"; }
+<h1 class="h3">Thanh toán giả lập</h1>
+<div class="alert alert-info">Đây là màn hình mô phỏng phục vụ bài tập. Không thu tiền và không yêu cầu thông tin thẻ/ngân hàng.</div>
+<div class="row g-4">
+    <div class="col-lg-7"><partial name="_BookingSummary" model="Model" /></div>
+    <div class="col-lg-5">
+        <div class="card"><div class="card-body">
+            <h2 class="h5">Chọn kết quả mô phỏng</h2>
+            <p>Thời gian còn lại: <strong data-booking-countdown data-expires-at="@Model.ExpiresAt.ToString("O")" data-server-now="@Model.ServerNow.ToString("O")">--:--</strong></p>
+            <form asp-action="Pay" method="post">
+                <input type="hidden" name="BookingId" value="@Model.BookingId" />
+                <label for="payment-method" class="form-label">Phương thức</label>
+                <select id="payment-method" name="Method" class="form-select mb-3">
+                    <option value="VNPay_Simulated">VNPay (giả lập)</option>
+                    <option value="MoMo_Simulated">MoMo (giả lập)</option>
+                </select>
+                <div class="d-grid gap-2">
+                    <button name="Outcome" value="Success" class="btn btn-success" data-requires-time>Thanh toán thành công</button>
+                    <button name="Outcome" value="Failed" class="btn btn-outline-danger" data-requires-time>Giả lập thanh toán thất bại</button>
+                    <button name="Outcome" value="Cancelled" class="btn btn-outline-secondary">Hủy thanh toán, nhả ghế</button>
+                </div>
+            </form>
+            <a asp-action="Checkout" asp-route-id="@Model.BookingId" class="d-block mt-3">← Quay lại xác nhận</a>
+        </div></div>
+    </div>
+</div>
+@section Scripts { <script src="~/js/booking.js" asp-append-version="true"></script> }

@@ -1,0 +1,55 @@
+@model SeatMapViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Chọn ghế · " + Model.MovieTitle;
+    var canBook = Context.Session.GetString("Role") == "Customer";
+}
+<div id="seat-booking" data-showtime-id="@Model.ShowtimeId" data-can-book="@canBook.ToString().ToLowerInvariant()"
+     data-snapshot-url="@Url.Action("SeatSnapshot", "Movies", new { id = Model.ShowtimeId })"
+     data-hold-url="@Url.Action("SetSeats", "Booking")" data-checkout-url="@Url.Action("Checkout", "Booking")"
+     data-login-url="@Url.Action("Login", "Account", new { returnUrl = Url.Action("Seats", "Movies", new { id = Model.ShowtimeId }) })"
+     data-hub-url="@Url.Content("~/hubs/seats")">
+    @Html.AntiForgeryToken()
+    @* JsonSerializer mặc định escape HTML; không chèn trực tiếp tiêu đề/phản hồi server vào JavaScript. *@
+    <script id="initial-seat-map" type="application/json">@Html.Raw(JsonSerializer.Serialize(Model, new JsonSerializerOptions(JsonSerializerDefaults.Web)))</script>
+    <a asp-action="Index">← Chọn phim khác</a>
+    <h1 class="h3 mt-3">@Model.MovieTitle</h1>
+    <p>@Model.Auditorium · @BookingDisplay.VietnamTime(Model.StartAt).ToString("HH:mm · dd/MM/yyyy") (giờ Việt Nam)</p>
+    @if (!canBook)
+    {
+        <div class="alert alert-info">
+            Bạn có thể xem sơ đồ ghế. Để đặt vé, hãy
+            <a asp-controller="Account" asp-action="Login" asp-route-returnUrl="@Url.Action("Seats", "Movies", new { id = Model.ShowtimeId })">đăng nhập bằng tài khoản khách hàng</a>.
+        </div>
+    }
+    <div id="booking-message" class="alert alert-danger d-none" role="alert"></div>
+    <div class="row g-4">
+        <section class="col-lg-8" aria-label="Sơ đồ ghế">
+            <div class="cinema-screen mb-4">MÀN HÌNH</div>
+            <div class="seat-map-scroll"><div id="seat-map" class="seat-map"></div></div>
+            <div class="seat-legend mt-4">
+                <span><i class="seat-key available"></i>Trống</span><span><i class="seat-key mine"></i>Bạn đang giữ</span>
+                <span><i class="seat-key held"></i>Người khác giữ</span><span><i class="seat-key sold"></i>Đã bán</span>
+                <span><i class="seat-key blocked"></i>Không sử dụng</span>
+            </div>
+            <p id="connection-status" class="small text-muted mt-3" role="status">Đang kết nối cập nhật ghế…</p>
+        </section>
+        <aside class="col-lg-4">
+            <div class="card"><div class="card-body">
+                <h2 class="h5">Ghế của bạn</h2>
+                <p id="selected-seats">Chưa chọn ghế</p>
+                <p class="mb-1">Thời gian giữ còn lại</p><strong id="seat-countdown" class="h3">--:--</strong>
+                <p class="small text-muted mt-2">Giữ ghế tối đa 5 phút kể từ lần chọn đầu. Chọn thêm hoặc tải lại trang không gia hạn.</p>
+                <div class="d-flex justify-content-between border-top pt-3 mb-3"><span>Tổng tiền</span><strong id="booking-total">0 đ</strong></div>
+                <a id="checkout-link" class="btn btn-primary w-100 disabled" aria-disabled="true">Tiếp tục đặt vé</a>
+                <button id="clear-seats" type="button" class="btn btn-link w-100 mt-2" disabled>Bỏ chọn tất cả</button>
+                <p class="small text-muted mb-0">Tối đa 20 ghế mỗi đơn. Ghế đôi là một đơn vị đặt vé cho hai người.</p>
+            </div></div>
+        </aside>
+    </div>
+    <noscript><div class="alert alert-warning mt-3">Vui lòng bật JavaScript để chọn ghế và nhận cập nhật theo thời gian thực.</div></noscript>
+</div>
+@section Scripts {
+    <script src="~/lib/signalr/signalr.min.js" asp-append-version="true"></script>
+    <script src="~/js/booking.js" asp-append-version="true"></script>
+}

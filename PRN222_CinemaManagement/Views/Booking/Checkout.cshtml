@@ -1,0 +1,34 @@
+@model BookingDetailsViewModel
+@{
+    ViewData["Title"] = "Xác nhận đặt vé";
+    var canPay = Model.Status == "Pending" && Model.ExpiresAt > Model.ServerNow && Model.Seats.Count > 0;
+}
+<h1 class="h3 mb-4">Xác nhận đặt vé</h1>
+<div class="row g-4">
+    <div class="col-lg-8"><partial name="_BookingSummary" model="Model" /></div>
+    <div class="col-lg-4">
+        @if (canPay)
+        {
+            <div class="card"><div class="card-body">
+                <h2 class="h5">Hoàn tất trong thời gian giữ ghế</h2>
+                <p class="display-6" data-booking-countdown data-expires-at="@Model.ExpiresAt.ToString("O")" data-server-now="@Model.ServerNow.ToString("O")">--:--</p>
+                <p class="small text-muted">Thanh toán thất bại có thể thử lại trước hạn này. Tải lại trang không gia hạn giữ ghế.</p>
+                <form asp-action="Checkout" asp-route-id="@Model.BookingId" method="post">
+                    <input type="hidden" name="confirm" value="true" />
+                    <button class="btn btn-primary w-100" data-requires-time>Xác nhận và thanh toán</button>
+                </form>
+                <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="btn btn-outline-secondary w-100 mt-2">Thay đổi ghế</a>
+                <form asp-action="Cancel" asp-route-id="@Model.BookingId" method="post" class="mt-2">
+                    <button class="btn btn-link text-danger w-100">Hủy đơn, nhả ghế</button>
+                </form>
+            </div></div>
+        }
+        else
+        {
+            <div class="alert alert-warning">Đơn đã hết hạn hoặc đã hủy. Hãy chọn ghế lại để bắt đầu đơn mới.</div>
+            <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="btn btn-primary">Chọn ghế lại</a>
+        }
+        <a asp-action="MyBookings" class="d-block mt-3">Xem các đơn của tôi</a>
+    </div>
+</div>
+@section Scripts { <script src="~/js/booking.js" asp-append-version="true"></script> }
