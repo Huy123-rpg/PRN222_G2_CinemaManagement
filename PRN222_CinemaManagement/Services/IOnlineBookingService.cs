@@ -15,6 +15,8 @@ public interface IOnlineBookingService
     Task CancelAsync(int userId, int bookingId, CancellationToken ct = default);
     Task<int> ReleaseExpiredAsync(CancellationToken ct = default);
     Task<byte[]?> GetTicketQrAsync(int userId, int ticketId, CancellationToken ct = default);
+    // confirm payment callback from VNPay
+    Task<string> ConfirmPaymentAsync(int bookingId, bool isSuccess, CancellationToken ct);
 }
 
 /// <summary>Lỗi nghiệp vụ có thể hiển thị trực tiếp bằng tiếng Việt; không lộ lỗi SQL ra ngoài.</summary>

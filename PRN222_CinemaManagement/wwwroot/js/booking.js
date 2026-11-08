@@ -1,33 +1,47 @@
-/* Luồng đặt vé: server là nguồn quyết định trạng thái ghế, tổng tiền và hạn giữ. */
-(() => {
+﻿/* Đặt vé online: luôn lấy trạng thái ghế, giá tiền và hạn giữ từ server. */
+(function () {
     "use strict";
 
-    // SQL datetime không lưu múi giờ; API mới dùng UTC, vẫn xử lý đúng chuỗi không có hậu tố Z.
-    const utcTime = value => {
+    function utcTime(value) {
         if (!value) return NaN;
-        return Date.parse(/[zZ]$|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
-    };
-    const countdownText = seconds => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
-    const money = value => `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)} đ`;
+        // Nếu SQL trả ngày chưa có múi giờ, hiểu đó là UTC.
+        if (!/[zZ]$|[+-]\d\d:\d\d$/.test(value)) value += "Z";
+        return Date.parse(value);
+    }
 
-    // Đồng hồ trên checkout/payment chỉ hỗ trợ giao diện; server luôn kiểm tra lại trước khi phát vé.
-    document.querySelectorAll("[data-booking-countdown]").forEach(element => {
+    function countdownText(seconds) {
+        const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
+        const remainder = (seconds % 60).toString().padStart(2, "0");
+        return minutes + ":" + remainder;
+    }
+
+    function money(value) {
+        return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value) + " đ";
+    }
+
+    // Đồng hồ trên trang xác nhận/thanh toán dùng giờ server, tránh phụ thuộc giờ máy khách.
+    const countdowns = document.querySelectorAll("[data-booking-countdown]");
+    for (const element of countdowns) {
         const expires = utcTime(element.dataset.expiresAt);
         const offset = utcTime(element.dataset.serverNow) - Date.now();
-        const tick = () => {
+        function tick() {
             const seconds = Math.max(0, Math.ceil((expires - Date.now() - offset) / 1000));
-            element.textContent = seconds > 0 ? countdownText(seconds) : "Đã hết thời gian giữ ghế";
-            if (seconds === 0) {
-                document.querySelectorAll("[data-requires-time]").forEach(button => { button.disabled = true; });
+            if (seconds > 0) {
+                element.textContent = countdownText(seconds);
+            } else {
+                element.textContent = "Đã hết thời gian giữ ghế";
                 element.classList.add("text-danger");
+                for (const button of document.querySelectorAll("[data-requires-time]")) {
+                    button.disabled = true;
+                }
             }
-        };
+        }
         tick();
         window.setInterval(tick, 1000);
-    });
+    }
 
     const root = document.getElementById("seat-booking");
-    if (!root) return;
+    if (!root) return; // Các trang khác chỉ cần đồng hồ ở trên.
 
     const mapElement = document.getElementById("seat-map");
     const messageElement = document.getElementById("booking-message");
@@ -37,97 +51,162 @@
     const csrf = root.querySelector('input[name="__RequestVerificationToken"]').value;
     let map = JSON.parse(document.getElementById("initial-seat-map").textContent);
     let canBook = root.dataset.canBook === "true";
-    let busy = false;
+    let busy = false;             // Không gửi hai yêu cầu giữ ghế cùng lúc.
     let refreshing = false;
     let refreshRequested = false;
     let closed = false;
     let expiryRefreshSent = false;
+    let changeNumber = 0;         // Bỏ qua phản hồi GET cũ nếu người dùng vừa thay đổi ghế.
     let serverOffset = utcTime(map.serverNow) - Date.now();
 
     function showMessage(message) {
-        // Không dùng innerHTML với lỗi API hoặc dữ liệu ghế để tránh chèn mã HTML.
+        // textContent hiển thị dữ liệu như văn bản, không thực thi HTML từ phản hồi API.
         messageElement.textContent = message;
         messageElement.classList.toggle("d-none", !message);
     }
 
     function remainingSeconds() {
-        return map.expiresAt ? Math.max(0, Math.ceil((utcTime(map.expiresAt) - Date.now() - serverOffset) / 1000)) : 0;
+        if (!map.expiresAt) return 0;
+        return Math.max(0, Math.ceil((utcTime(map.expiresAt) - Date.now() - serverOffset) / 1000));
     }
 
-    function selectedSeats() { return map.seats.filter(seat => seat.isMine); }
+    function selectedSeats() {
+        const selected = [];
+        for (const seat of map.seats) {
+            if (seat.isMine) selected.push(seat);
+        }
+        return selected;
+    }
 
     function updateSummary() {
         const selected = selectedSeats();
+        const labels = [];
+        let total = 0;
+        for (const seat of selected) {
+            labels.push(seat.rowLabel + seat.seatNumber);
+            total += seat.price;
+        }
+        const selectedElement = document.getElementById("selected-seats");
+        selectedElement.textContent = "Chưa chọn ghế";
+        if (labels.length > 0) selectedElement.textContent = labels.join(", ");
+        document.getElementById("booking-total").textContent = money(total);
+
         const ready = canBook && !busy && !closed && map.bookingId && selected.length > 0 && remainingSeconds() > 0;
-        document.getElementById("selected-seats").textContent = selected.length
-            ? selected.map(seat => `${seat.rowLabel}${seat.seatNumber}`).join(", ") : "Chưa chọn ghế";
-        document.getElementById("booking-total").textContent = money(selected.reduce((total, seat) => total + seat.price, 0));
-        checkoutLink.classList.toggle("disabled", !ready);
-        checkoutLink.setAttribute("aria-disabled", ready ? "false" : "true");
-        if (ready) checkoutLink.href = `${root.dataset.checkoutUrl}?id=${encodeURIComponent(map.bookingId)}`;
-        else checkoutLink.removeAttribute("href");
+        if (ready) {
+            checkoutLink.href = root.dataset.checkoutUrl + "?id=" + encodeURIComponent(map.bookingId);
+            checkoutLink.classList.remove("disabled");
+            checkoutLink.setAttribute("aria-disabled", "false");
+        } else {
+            checkoutLink.removeAttribute("href");
+            checkoutLink.classList.add("disabled");
+            checkoutLink.setAttribute("aria-disabled", "true");
+        }
         clearButton.disabled = !canBook || busy || closed || selected.length === 0;
     }
 
     function render() {
-        const focusId = document.activeElement?.dataset?.seatId;
+        let focusId = null;
+        if (document.activeElement) focusId = document.activeElement.dataset.seatId;
         mapElement.replaceChildren();
-        const rows = new Map();
-        map.seats.forEach(seat => {
-            if (!rows.has(seat.rowLabel)) rows.set(seat.rowLabel, []);
-            rows.get(seat.rowLabel).push(seat);
+
+        // Sắp theo hàng rồi số ghế để tạo sơ đồ bằng một vòng lặp dễ theo dõi.
+        const seats = map.seats.slice();
+        seats.sort(function (a, b) {
+            if (a.rowLabel === b.rowLabel) return a.seatNumber - b.seatNumber;
+            return a.rowLabel.localeCompare(b.rowLabel);
         });
-        for (const [label, seats] of rows) {
-            const row = document.createElement("div");
-            row.className = "seat-row";
-            const heading = document.createElement("span");
-            heading.className = "seat-row-label";
-            heading.textContent = label;
-            row.append(heading);
-            seats.sort((a, b) => a.seatNumber - b.seatNumber).forEach(seat => {
-                const button = document.createElement("button");
-                button.type = "button";
-                const state = seat.isMine ? "mine" : seat.status.toLowerCase();
-                button.className = `seat-button ${["available", "mine", "held", "sold"].includes(state) ? state : "blocked"}`;
-                button.classList.toggle("couple", seat.seatType === "Couple");
-                button.dataset.seatId = seat.showtimeSeatId;
-                button.disabled = !canBook || busy || closed || (!seat.isMine && seat.status !== "Available");
-                button.setAttribute("aria-pressed", seat.isMine ? "true" : "false");
-                const stateText = seat.isMine ? "Bạn đang giữ" : ({ Available: "Trống", Held: "Người khác giữ", Sold: "Đã bán" }[seat.status] || "Không sử dụng");
-                button.title = `Ghế ${seat.rowLabel}${seat.seatNumber} · ${seat.seatType} · ${money(seat.price)} · ${stateText}`;
-                button.setAttribute("aria-label", button.title);
-                button.textContent = `${seat.rowLabel}${seat.seatNumber}`;
-                const type = document.createElement("small");
-                type.textContent = seat.seatType === "Standard" ? "Thường" : seat.seatType === "Couple" ? "Đôi" : seat.seatType;
-                button.append(type);
-                button.addEventListener("click", () => {
-                    const ids = selectedSeats().map(item => item.showtimeSeatId);
-                    const desired = seat.isMine ? ids.filter(id => id !== seat.showtimeSeatId) : [...ids, seat.showtimeSeatId];
-                    if (desired.length > 20) { showMessage("Mỗi đơn được chọn tối đa 20 ghế."); return; }
-                    void setSeats(desired);
-                });
-                row.append(button);
-            });
-            mapElement.append(row);
+        let currentRow = null;
+        let previousLabel = null;
+        for (const seat of seats) {
+            if (seat.rowLabel !== previousLabel) {
+                currentRow = document.createElement("div");
+                currentRow.className = "seat-row";
+                const heading = document.createElement("span");
+                heading.className = "seat-row-label";
+                heading.textContent = seat.rowLabel;
+                currentRow.append(heading);
+                mapElement.append(currentRow);
+                previousLabel = seat.rowLabel;
+            }
+
+            let state = "blocked";
+            let stateText = "Không sử dụng";
+            if (seat.isMine) {
+                state = "mine";
+                stateText = "Bạn đang giữ";
+            } else if (seat.status === "Available") {
+                state = "available";
+                stateText = "Trống";
+            } else if (seat.status === "Held") {
+                state = "held";
+                stateText = "Người khác giữ";
+            } else if (seat.status === "Sold") {
+                state = "sold";
+                stateText = "Đã bán";
+            }
+
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "seat-button " + state;
+            button.classList.toggle("couple", seat.seatType === "Couple");
+            button.dataset.seatId = seat.showtimeSeatId;
+            button.disabled = !canBook || busy || closed || (!seat.isMine && seat.status !== "Available");
+            button.setAttribute("aria-pressed", String(seat.isMine));
+            button.title = "Ghế " + seat.rowLabel + seat.seatNumber + " · " + seat.seatType + " · " + money(seat.price) + " · " + stateText;
+            button.setAttribute("aria-label", button.title);
+            button.textContent = seat.rowLabel + seat.seatNumber;
+            const type = document.createElement("small");
+            type.textContent = seat.seatType;
+            if (seat.seatType === "Standard") type.textContent = "Thường";
+            if (seat.seatType === "Couple") type.textContent = "Đôi";
+            button.append(type);
+            currentRow.append(button);
         }
-        if (map.seats.length === 0) mapElement.textContent = "Suất chiếu chưa có ghế mở bán.";
-        if (focusId) mapElement.querySelector(`[data-seat-id="${Number(focusId)}"]`)?.focus();
+        if (seats.length === 0) mapElement.textContent = "Suất chiếu chưa có ghế mở bán.";
+        if (focusId) {
+            const focusedButton = mapElement.querySelector('[data-seat-id="' + Number(focusId) + '"]');
+            if (focusedButton) focusedButton.focus();
+        }
         updateSummary();
     }
 
+    // Một sự kiện click dùng chung cho các nút ghế, kể cả sau khi vẽ lại sơ đồ.
+    mapElement.addEventListener("click", function (event) {
+        const button = event.target.closest("button[data-seat-id]");
+        if (!button || button.disabled) return;
+        const seatId = Number(button.dataset.seatId);
+        const ids = [];
+        let wasSelected = false;
+        for (const seat of selectedSeats()) {
+            if (seat.showtimeSeatId === seatId) wasSelected = true;
+            else ids.push(seat.showtimeSeatId);
+        }
+        if (!wasSelected) ids.push(seatId);
+        if (ids.length > 20) {
+            showMessage("Mỗi đơn được chọn tối đa 20 ghế.");
+            return;
+        }
+        setSeats(ids);
+    });
+
     async function responseMessage(response, fallback) {
-        if (response.headers.get("content-type")?.includes("application/json")) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
             const body = await response.json();
-            return body.message || fallback;
+            if (body.message) return body.message;
         }
         return fallback;
     }
 
-    // Gộp các sự kiện đến gần nhau; không ghi đè snapshot giữa lúc POST đang giữ/nhả ghế.
+    // Chỉ đọc một snapshot mỗi lần; các thông báo đến trong lúc bận sẽ được đọc lại sau.
     async function refresh() {
         if (closed) return;
-        if (busy || refreshing) { refreshRequested = true; return; }
+        if (busy || refreshing) {
+            refreshRequested = true;
+            return;
+        }
         refreshing = true;
+        const requestChangeNumber = changeNumber;
         try {
             const response = await fetch(root.dataset.snapshotUrl, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) {
@@ -135,7 +214,10 @@
                 throw new Error(await responseMessage(response, "Chưa thể cập nhật sơ đồ ghế. Hệ thống sẽ tự thử lại."));
             }
             const snapshot = await response.json();
-            if (busy) { refreshRequested = true; return; }
+            if (busy || requestChangeNumber !== changeNumber) {
+                refreshRequested = true;
+                return;
+            }
             map = snapshot;
             serverOffset = utcTime(map.serverNow) - Date.now();
             if (!map.bookingId) expiryRefreshSent = false;
@@ -147,7 +229,7 @@
             refreshing = false;
             if (refreshRequested && !busy) {
                 refreshRequested = false;
-                window.setTimeout(() => void refresh(), 200);
+                window.setTimeout(refresh, 200);
             }
         }
     }
@@ -155,6 +237,7 @@
     async function setSeats(ids) {
         if (busy || !canBook || closed) return;
         busy = true;
+        changeNumber++;
         showMessage("");
         render();
         try {
@@ -164,12 +247,14 @@
                 body: JSON.stringify({ showtimeId: map.showtimeId, bookingId: map.bookingId, showtimeSeatIds: ids })
             });
             if (response.redirected) {
-                // Session hết hạn: về trang đăng nhập với returnUrl là trang chọn ghế, không phải API POST.
+                // Session hết hạn: đăng nhập xong quay lại trang chọn ghế, không quay lại API POST.
                 canBook = false;
                 window.location.assign(root.dataset.loginUrl);
                 return;
             }
-            if (!response.ok) throw new Error(await responseMessage(response, "Không thể giữ ghế. Vui lòng thử lại hoặc tải lại trang."));
+            if (!response.ok) {
+                throw new Error(await responseMessage(response, "Không thể giữ ghế. Vui lòng thử lại hoặc tải lại trang."));
+            }
             const result = await response.json();
             map.bookingId = result.bookingId;
             map.expiresAt = result.expiresAt;
@@ -179,54 +264,75 @@
             showMessage(error.message || "Không thể kết nối đến máy chủ. Đang kiểm tra lại trạng thái ghế.");
         } finally {
             busy = false;
-            // Đọc lại cả khi mất phản hồi: POST có thể đã commit dù kết nối vừa bị ngắt.
+            // Vẫn đọc lại sau lỗi mạng vì server có thể đã lưu việc giữ ghế.
             await refresh();
             render();
         }
     }
 
-    clearButton.addEventListener("click", () => void setSeats([]));
+    clearButton.addEventListener("click", function () { setSeats([]); });
     render();
-    window.setInterval(() => {
+    window.setInterval(function () {
         const seconds = remainingSeconds();
-        document.getElementById("seat-countdown").textContent = map.bookingId ? countdownText(seconds) : "--:--";
+        const countdown = document.getElementById("seat-countdown");
+        countdown.textContent = "--:--";
+        if (map.bookingId) countdown.textContent = countdownText(seconds);
         updateSummary();
         if (map.bookingId && seconds === 0 && !expiryRefreshSent) {
             expiryRefreshSent = true;
             showMessage("Đã hết thời gian giữ ghế. Vui lòng chọn ghế lại.");
-            void refresh();
+            refresh();
         }
     }, 1000);
 
-    // Polling bổ sung giúp phục hồi sau sự kiện bị bỏ lỡ hoặc khi thư viện/kết nối SignalR lỗi.
-    window.setInterval(() => { if (!document.hidden) void refresh(); }, 5000);
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) void refresh(); });
+    // Đọc lại mỗi 5 giây để phục hồi khi mất kết nối hoặc bỏ lỡ một sự kiện SignalR.
+    window.setInterval(function () {
+        if (!document.hidden) refresh();
+    }, 5000);
+    document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) refresh();
+    });
     if (!window.signalR) {
         statusElement.textContent = "Đang cập nhật sơ đồ mỗi 5 giây.";
         return;
     }
-    const connection = new signalR.HubConnectionBuilder().withUrl(root.dataset.hubUrl).withAutomaticReconnect().build();
-    const joinAndRefresh = async () => {
+
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl(root.dataset.hubUrl).withAutomaticReconnect().build();
+
+    async function joinAndRefresh() {
         await connection.invoke("JoinShowtime", map.showtimeId);
         statusElement.textContent = "Đã kết nối cập nhật ghế trực tiếp.";
         await refresh();
-    };
-    connection.on("SeatStatusChanged", change => {
-        if (change.showtimeId === map.showtimeId) void refresh();
+    }
+
+    connection.on("SeatStatusChanged", function (change) {
+        if (change.showtimeId === map.showtimeId) refresh();
     });
-    connection.onreconnecting(() => { statusElement.textContent = "Đang kết nối lại; sơ đồ vẫn cập nhật mỗi 5 giây."; });
-    connection.onreconnected(() => {
-        // Group của kết nối cũ không tự được phục hồi; luôn đăng ký lại rồi lấy snapshot.
-        void joinAndRefresh().catch(() => { statusElement.textContent = "Đang cập nhật sơ đồ mỗi 5 giây."; });
+    connection.onreconnecting(function () {
+        statusElement.textContent = "Đang kết nối lại; sơ đồ vẫn cập nhật mỗi 5 giây.";
     });
-    const start = async () => {
-        if (closed) return;
-        try { await connection.start(); await joinAndRefresh(); }
-        catch {
-            statusElement.textContent = "Đang cập nhật sơ đồ mỗi 5 giây; sẽ thử kết nối trực tiếp lại.";
-            if (connection.state === signalR.HubConnectionState.Disconnected) window.setTimeout(() => void start(), 5000);
+    connection.onreconnected(async function () {
+        // Kết nối mới phải vào lại nhóm của suất chiếu và lấy lại sơ đồ hiện tại.
+        try {
+            await joinAndRefresh();
+        } catch {
+            statusElement.textContent = "Đang cập nhật sơ đồ mỗi 5 giây.";
         }
-    };
-    connection.onclose(() => { if (!closed) window.setTimeout(() => void start(), 5000); });
-    void start();
+    });
+
+    async function start() {
+        if (closed) return;
+        try {
+            await connection.start();
+            await joinAndRefresh();
+        } catch {
+            statusElement.textContent = "Đang cập nhật sơ đồ mỗi 5 giây; sẽ thử kết nối trực tiếp lại.";
+            if (connection.state === signalR.HubConnectionState.Disconnected) window.setTimeout(start, 5000);
+        }
+    }
+    connection.onclose(function () {
+        if (!closed) window.setTimeout(start, 5000);
+    });
+    start();
 })();

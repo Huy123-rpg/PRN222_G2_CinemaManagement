@@ -13,24 +13,13 @@ builder.Services.AddDbContext<CinemaDbContext>(options =>
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddHttpContextAccessor();
 
-// Đồng hồ hệ thống cho mọi tầng đặt vé; dùng UTC thống nhất, hiển thị giờ Việt Nam.
-builder.Services.AddSingleton(TimeProvider.System);
-
-// ===== Module đặt vé online (Dịch vụ) =====
-// Tầng điều phối nghiệp vụ: giữ/nhả ghế, thanh toán, phát vé, giải phóng hết hạn.
+// Module đặt vé online: đăng ký interface/service giống IPasswordService ở trên.
 builder.Services.AddScoped<IOnlineBookingService, OnlineBookingService>();
-builder.Services.AddScoped<PRN222_CinemaManagement.Services.OnlineBooking.SeatHoldManager>();
-builder.Services.AddScoped<PRN222_CinemaManagement.Services.OnlineBooking.BookingCatalogService>();
-// Cổng thanh toán giả lập + email giả lập + mã QR cho vé điện tử.
-builder.Services.AddSingleton<PRN222_CinemaManagement.Services.OnlineBooking.IPaymentGateway,
-    PRN222_CinemaManagement.Services.OnlineBooking.SimulatedPaymentGateway>();
-builder.Services.AddSingleton<PRN222_CinemaManagement.Services.OnlineBooking.IQrCodeGenerator,
-    PRN222_CinemaManagement.Services.OnlineBooking.QrCodeGenerator>();
-builder.Services.AddSingleton<ITicketEmailSender, SimulatedTicketEmailSender>();
 
 // ===== SignalR: kênh cập nhật sơ đồ ghế thời gian thực =====
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<ISeatNotifier, SeatNotifier>();
+// ===== VNPay: thanh toán online =====
+builder.Services.AddScoped<VnPayService>();
 
 // ===== Worker nền: quét và nhả ghế của các đơn đã hết hạn giữ =====
 builder.Services.AddHostedService<SeatHoldExpirationService>();

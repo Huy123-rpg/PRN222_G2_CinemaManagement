@@ -1,611 +1,718 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using PRN222_CinemaManagement.Data;
+using PRN222_CinemaManagement.Hubs;
 using PRN222_CinemaManagement.Models.Entities;
 using PRN222_CinemaManagement.Models.ViewModels;
-using PRN222_CinemaManagement.Services.OnlineBooking;
+using QRCoder;
 
 namespace PRN222_CinemaManagement.Services;
 
-/// <summary>
-/// Tầng điều phối nghiệp vụ đặt vé online.
-/// Đây là nơi duy nhất được phép ghi trạng thái ghế, tạo đơn, ghi thanh toán và phát vé.
-/// Mọi thao tác đều dựa trên dữ liệu lấy từ máy chủ; không tin giá, tổng tiền hay
-/// danh tính người mua do trình duyệt gửi lên.
-/// </summary>
-public sealed class OnlineBookingService : IOnlineBookingService
+// Controller xử lý HTTP/Session; service này xử lý database và nghiệp vụ đặt vé.
+// Dùng constructor injection giống AccountController, không tạo thêm các lớp trung gian.
+public class OnlineBookingService(CinemaDbContext context, IHubContext<SeatHub> hubContext,
+    ILogger<OnlineBookingService> logger) : IOnlineBookingService
 {
-    private readonly CinemaDbContext db;
-    private readonly TimeProvider clock;
-    private readonly ISeatNotifier notifier;
-    private readonly ITicketEmailSender emailSender;
-    private readonly SeatHoldManager seats;
-    private readonly BookingCatalogService catalog;
-    private readonly IPaymentGateway gateway;
-    private readonly IQrCodeGenerator qr;
+    // 1. XEM PHIM VÀ SƠ ĐỒ GHẾ
 
-    public OnlineBookingService(
-        CinemaDbContext db,
-        TimeProvider clock,
-        ISeatNotifier notifier,
-        ITicketEmailSender emailSender,
-        ILogger<OnlineBookingService> logger,
-        SeatHoldManager? seatManager = null,
-        BookingCatalogService? catalogService = null,
-        IPaymentGateway? paymentGateway = null,
-        IQrCodeGenerator? qrCodeGenerator = null)
+    public async Task<IReadOnlyList<MovieCardViewModel>> GetMoviesAsync(CancellationToken ct = default)
     {
-        this.db = db;
-        this.clock = clock;
-        this.notifier = notifier;
-        this.emailSender = emailSender;
-        // Các tầng phụ được tạo từ DbContext khi không được tiêm vào (ví dụ trong kiểm thử).
-        seats = seatManager ?? new SeatHoldManager(db);
-        catalog = catalogService ?? new BookingCatalogService(db, clock);
-        gateway = paymentGateway ?? new SimulatedPaymentGateway();
-        qr = qrCodeGenerator ?? new QrCodeGenerator();
-        Logger = logger;
+        var movies = await context.Movies.AsNoTracking()
+            .Where(m => m.Status == "Showing").OrderBy(m => m.Title).ToListAsync(ct);
+        var result = new List<MovieCardViewModel>();
+        foreach (var movie in movies)
+        {
+            result.Add(CreateMovieViewModel(movie));
+        }
+        return result;
     }
 
-    private ILogger<OnlineBookingService> Logger { get; }
+    public async Task<MovieDetailsViewModel?> GetMovieAsync(int movieId, CancellationToken ct = default)
+    {
+        var movie = await context.Movies.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.MovieId == movieId && m.Status == "Showing", ct);
+        if (movie == null) return null;
 
-    // ==================================================================
-    // 1. Đọc dữ liệu (không tạo đơn, không thay đổi trạng thái ghế)
-    // ==================================================================
+        var now = DateTime.UtcNow;
+        var showtimes = await context.Showtimes.AsNoTracking()
+            .Include(s => s.Auditorium)
+            .Where(s => s.MovieId == movieId && s.Status == "Scheduled"
+                && s.StartAt > now && s.Auditorium.Status == "Active")
+            .OrderBy(s => s.StartAt).ToListAsync(ct);
 
-    public Task<IReadOnlyList<MovieCardViewModel>> GetMoviesAsync(CancellationToken ct = default) =>
-        catalog.GetMoviesAsync(ct);
+        var model = new MovieDetailsViewModel { Movie = CreateMovieViewModel(movie) };
+        foreach (var showtime in showtimes)
+        {
+            model.Showtimes.Add(new ShowtimeOptionViewModel
+            {
+                ShowtimeId = showtime.ShowtimeId,
+                Auditorium = showtime.Auditorium.Name,
+                StartAt = AsUtc(showtime.StartAt),
+                BasePrice = showtime.BasePrice
+            });
+        }
+        return model;
+    }
 
-    public Task<MovieDetailsViewModel?> GetMovieAsync(int movieId, CancellationToken ct = default) =>
-        catalog.GetMovieAsync(movieId, ct);
+    public async Task<SeatMapViewModel?> GetSeatMapAsync(int showtimeId, int? userId, CancellationToken ct = default)
+    {
+        var showtime = await GetOpenShowtimeAsync(showtimeId, ct);
+        if (showtime == null) return null;
 
-    public Task<SeatMapViewModel?> GetSeatMapAsync(int showtimeId, int? userId, CancellationToken ct = default) =>
-        catalog.GetSeatMapAsync(showtimeId, userId, ct);
+        var now = DateTime.UtcNow;
+        Booking? myBooking = null;
+        if (userId.HasValue)
+        {
+            // Chỉ trả mã đơn của người xem, không gửi người giữ ghế khác ra trình duyệt.
+            myBooking = await context.Bookings.AsNoTracking()
+                .Where(b => b.ShowtimeId == showtimeId && b.BookingChannel == "Online"
+                    && b.Status == "Pending" && b.ExpiresAt > now && b.Customer != null
+                    && b.Customer.UserId == userId.Value && b.Customer.User.Status == "Active"
+                    && b.Customer.User.Role.RoleName == "Customer")
+                .OrderByDescending(b => b.BookingId).FirstOrDefaultAsync(ct);
+        }
 
-    public Task<BookingDetailsViewModel?> GetBookingAsync(int userId, int bookingId, CancellationToken ct = default) =>
-        catalog.GetBookingAsync(userId, bookingId, ct);
+        var showtimeSeats = await context.ShowtimeSeats.AsNoTracking()
+            .Include(s => s.Seat).ThenInclude(s => s.SeatType)
+            .Where(s => s.ShowtimeId == showtimeId)
+            .OrderBy(s => s.Seat.RowLabel).ThenBy(s => s.Seat.SeatNumber).ToListAsync(ct);
 
-    public Task<IReadOnlyList<BookingDetailsViewModel>> GetMyBookingsAsync(int userId, CancellationToken ct = default) =>
-        catalog.GetMyBookingsAsync(userId, ct);
+        var model = new SeatMapViewModel
+        {
+            ShowtimeId = showtimeId,
+            MovieTitle = showtime.Movie.Title,
+            Auditorium = showtime.Auditorium.Name,
+            StartAt = AsUtc(showtime.StartAt),
+            ServerNow = now
+        };
+        if (myBooking != null)
+        {
+            model.BookingId = myBooking.BookingId;
+            model.ExpiresAt = AsUtc(myBooking.ExpiresAt);
+        }
 
-    // ==================================================================
-    // 2. Giữ / nhả ghế (TEC-02 - chống bán trùng ghế)
-    // ==================================================================
+        foreach (var seat in showtimeSeats)
+        {
+            var status = seat.Status;
+            if (status != "Sold")
+            {
+                if (seat.Seat.Status != "Active" || !seat.Seat.SeatType.IsActive)
+                    status = "Blocked";
+                else if (status == "Held" && seat.HoldExpiresAt <= now)
+                    status = "Available"; // Hết hạn thì có thể chọn lại ngay, không cần chờ worker.
+            }
+            model.Seats.Add(new SeatViewModel
+            {
+                ShowtimeSeatId = seat.ShowtimeSeatId,
+                RowLabel = seat.Seat.RowLabel,
+                SeatNumber = seat.Seat.SeatNumber,
+                SeatType = seat.Seat.SeatType.TypeName,
+                Price = seat.Price,
+                Status = status,
+                IsMine = myBooking != null && status == "Held"
+                    && seat.HeldByBookingId == myBooking.BookingId
+            });
+        }
+        return model;
+    }
 
-    /// <summary>
-    /// Giữ (hoặc thay đổi) lựa chọn ghế của khách.
-    /// Toàn bộ thao tác nằm trong một transaction: nếu một ghế trong nhóm không còn khả dụng
-    /// thì mọi ghế đã giữ trong nhóm cũng được hoàn tác, không để lại đơn mồ côi.
-    /// </summary>
+    // 2. CHỌN GHẾ — tất cả ghế cùng được giữ, hoặc không thay đổi ghế nào.
+
     public async Task<HoldResultViewModel> SetSeatsAsync(int userId, SetSeatsRequest request, CancellationToken ct = default)
     {
-        var now = clock.GetUtcNow().UtcDateTime;
-        await EnsureActiveCustomerAsync(userId, ct);
+        var customerId = await GetActiveCustomerIdAsync(userId, ct);
+        var seatIds = request.ShowtimeSeatIds;
+        if (request.ShowtimeId <= 0 || request.BookingId <= 0 || seatIds == null
+            || seatIds.Length > 20 || seatIds.Any(id => id <= 0)
+            || seatIds.Distinct().Count() != seatIds.Length)
+        {
+            throw new BookingException("Danh sách ghế không hợp lệ. Mỗi đơn chọn tối đa 20 ghế.", 400);
+        }
 
-        var desiredIds = (request.ShowtimeSeatIds ?? [])
-            .Distinct()
-            .OrderBy(id => id) // Sắp xếp tăng dần để tránh deadlock khi hai khách chọn ghế chéo nhau.
-            .ToArray();
+        if (seatIds.Length == 0)
+        {
+            if (request.BookingId.HasValue)
+                await CancelAsync(userId, request.BookingId.Value, ct);
+            return new HoldResultViewModel { ServerNow = DateTime.UtcNow };
+        }
 
-        if (desiredIds.Length > BookingStates.MaxSeatsPerBooking)
-            throw new BookingException($"Mỗi đơn chỉ được chọn tối đa {BookingStates.MaxSeatsPerBooking} ghế.", 400);
+        var showtime = await GetOpenShowtimeAsync(request.ShowtimeId, ct);
+        if (showtime == null) throw new BookingException("Suất chiếu không còn mở bán.", 404);
 
-        // Suất chiếu phải còn mở bán: đã lịch, chưa bắt đầu, phim đang chiếu, phòng hoạt động.
-        var showtime = await db.Showtimes
-            .AsNoTracking()
-            .Where(s => s.ShowtimeId == request.ShowtimeId
-                     && s.Status == "Scheduled"
-                     && s.StartAt > now
-                     && s.Movie.Status == "Showing"
-                     && s.Auditorium.Status == "Active")
-            .Select(s => new { s.ShowtimeId, s.StartAt })
-            .FirstOrDefaultAsync(ct);
-
-        if (showtime is null)
-            throw new BookingException("Suất chiếu không tồn tại hoặc đã ngừng nhận đặt vé.", 404);
-
-        // Lựa chọn rỗng kèm đơn đang có = yêu cầu bỏ chọn tất cả và nhả ghế.
-        if (desiredIds.Length == 0)
-            return await ReleaseSelectionAsync(userId, request.BookingId, ct);
-
-        // Kiểm tra ghế thuộc đúng suất chiếu và ghế vật lý còn dùng được.
-        var seatRows = await db.ShowtimeSeats
-            .AsNoTracking()
-            .Where(ss => ss.ShowtimeId == showtime.ShowtimeId && desiredIds.Contains(ss.ShowtimeSeatId))
-            .Select(ss => new { ss.ShowtimeSeatId, ss.SeatId, SeatStatus = ss.Seat.Status })
-            .ToListAsync(ct);
-
-        if (seatRows.Count != desiredIds.Length)
-            throw new BookingException("Một hoặc nhiều ghế không thuộc suất chiếu này. Vui lòng tải lại sơ đồ ghế.", 404);
-
-        if (seatRows.Any(s => s.SeatStatus != "Active"))
-            throw new BookingException("Một hoặc nhiều ghế đang bảo trì, không thể chọn. Vui lòng chọn ghế khác.", 409);
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // Transaction đảm bảo không giữ dở một phần ghế nếu một ghế khác đã bị mua.
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+        HoldResultViewModel result;
         try
         {
-            // Tìm hoặc tạo đơn giữ ghế.
             Booking booking;
-            if (request.BookingId is int existingId)
+            if (request.BookingId.HasValue)
             {
-                booking = await LoadOwnedPendingBookingAsync(userId, existingId, now, ct)
-                          ?? throw new BookingException("Đơn đặt vé không còn hiệu lực. Vui lòng chọn ghế lại.", 409);
+                booking = await LockOwnedBookingAsync(customerId, request.BookingId.Value, ct);
+                if (booking.ShowtimeId != request.ShowtimeId)
+                    throw new BookingException("Đơn không thuộc suất chiếu này.", 400);
+                CheckPendingBooking(booking);
             }
             else
             {
+                // SQL lưu chính xác tới giây. Bỏ phần lẻ để không làm tròn tăng hạn giữ.
+                var now = DateTime.UtcNow;
+                now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerSecond));
+                var expiresAt = now.AddMinutes(5);
+                if (expiresAt > showtime.StartAt) expiresAt = AsUtc(showtime.StartAt);
+                if (expiresAt <= DateTime.UtcNow)
+                    throw new BookingException("Suất chiếu đã bắt đầu. Vui lòng chọn suất khác.");
+
                 booking = new Booking
                 {
-                    BookingCode = await GenerateBookingCodeAsync(ct),
-                    CustomerId = await GetCustomerIdAsync(userId, ct),
-                    ShowtimeId = showtime.ShowtimeId,
+                    BookingCode = "BK-" + Guid.NewGuid().ToString("N"),
+                    CustomerId = customerId,
+                    ShowtimeId = request.ShowtimeId,
                     BookingDate = now,
-                    // Hạn giữ cố định 5 phút kể từ lần chọn đầu tiên.
-                    ExpiresAt = now.AddMinutes(BookingStates.HoldMinutes),
-                    Status = BookingStates.BookingPending,
+                    ExpiresAt = expiresAt,
                     BookingChannel = "Online",
-                    TotalAmount = 0m
+                    Status = "Pending"
                 };
-                db.Bookings.Add(booking);
-                // Phải lưu đơn trước để có khóa chính làm giá trị HeldByBookingId của ghế.
-                await db.SaveChangesAsync(ct);
+                context.Bookings.Add(booking);
+                await context.SaveChangesAsync(ct);
+                // Các bước sau dùng ExecuteUpdate nên không để EF ghi lại bản đơn cũ.
+                context.Entry(booking).State = EntityState.Detached;
             }
 
-            // Ghế đang do chính đơn này giữ: giữ nguyên, không gia hạn hạn.
-            var alreadyMine = await db.ShowtimeSeats
-                .Where(ss => ss.ShowtimeId == showtime.ShowtimeId
-                         && desiredIds.Contains(ss.ShowtimeSeatId)
-                         && ss.HeldByBookingId == booking.BookingId
-                         && ss.Status == BookingStates.SeatHeld)
-                .Select(ss => ss.ShowtimeSeatId)
-                .ToListAsync(ct);
+            var selectedSeats = await context.ShowtimeSeats.AsNoTracking()
+                .Where(s => s.ShowtimeId == request.ShowtimeId && seatIds.Contains(s.ShowtimeSeatId)
+                    && s.Seat.Status == "Active" && s.Seat.SeatType.IsActive)
+                .OrderBy(s => s.ShowtimeSeatId).ToListAsync(ct);
+            if (selectedSeats.Count != seatIds.Length)
+                throw new BookingException("Có ghế không thuộc suất chiếu hoặc đang bảo trì.", 400);
 
-            foreach (var seatId in desiredIds)
+            // Giữ ghế theo ID tăng dần để các request khóa ghế theo cùng thứ tự.
+            foreach (var seat in selectedSeats)
             {
-                if (alreadyMine.Contains(seatId)) continue;
+                var now = DateTime.UtcNow;
+                var updated = await context.ShowtimeSeats
+                    .Where(s => s.ShowtimeSeatId == seat.ShowtimeSeatId
+                        && s.Seat.Status == "Active" && s.Seat.SeatType.IsActive
+                        && (s.Status == "Available" || (s.Status == "Held"
+                            && (s.HoldExpiresAt <= now || s.HeldByBookingId == booking.BookingId))))
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(s => s.Status, "Held")
+                        .SetProperty(s => s.HeldByBookingId, (int?)booking.BookingId)
+                        .SetProperty(s => s.HoldExpiresAt, (DateTime?)booking.ExpiresAt), ct);
 
-                // UPDATE nguyên tử: chỉ giữ được nếu ghế còn trống hoặc đã hết hạn.
-                var acquired = await seats.TryAcquireAsync(showtime.ShowtimeId, seatId, booking.BookingId,
-                    booking.ExpiresAt, now, ct);
-
-                if (!acquired)
-                    throw new BookingException(
-                        "Một hoặc nhiều ghế vừa được người khác chọn. Lựa chọn của bạn chưa được giữ, vui lòng chọn lại.",
-                        409);
+                // Điều kiện và UPDATE chạy cùng lúc ở SQL. Hai người không thể cùng lấy ghế.
+                if (updated != 1)
+                    throw new BookingException("Ghế vừa được người khác giữ hoặc mua. Vui lòng chọn lại.");
             }
 
-            // Nhả các ghế đang giữ mà khách không chọn nữa.
-            await seats.ReleaseAsync(booking.BookingId, desiredIds, ct);
+            // Bỏ chọn ghế nào thì nhả ghế đó, không thay đổi hạn của các ghế giữ lại.
+            await context.ShowtimeSeats
+                .Where(s => s.HeldByBookingId == booking.BookingId && s.Status == "Held"
+                    && !seatIds.Contains(s.ShowtimeSeatId))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(s => s.Status, "Available")
+                    .SetProperty(s => s.HeldByBookingId, (int?)null)
+                    .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
 
-            // Tổng tiền luôn tính từ giá ghế trên máy chủ.
-            var total = await db.ShowtimeSeats
-                .Where(ss => ss.ShowtimeId == showtime.ShowtimeId
-                         && desiredIds.Contains(ss.ShowtimeSeatId)
-                         && ss.HeldByBookingId == booking.BookingId
-                         && ss.Status == BookingStates.SeatHeld)
-                .SumAsync(ss => ss.Price, ct);
+            var total = selectedSeats.Sum(s => s.Price);
+            var checkTime = DateTime.UtcNow;
+            var saved = await context.Bookings
+                .Where(b => b.BookingId == booking.BookingId && b.Status == "Pending" && b.ExpiresAt > checkTime
+                    && b.Showtime.Status == "Scheduled" && b.Showtime.StartAt > checkTime
+                    && b.Showtime.Movie.Status == "Showing" && b.Showtime.Auditorium.Status == "Active")
+                .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.TotalAmount, total), ct);
+            if (saved != 1) throw new BookingException("Đã hết thời gian giữ ghế hoặc suất chiếu đã đóng.");
 
-            booking.TotalAmount = total;
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-
-            await NotifySafelyAsync(showtime.ShowtimeId, ct);
-
-            return new HoldResultViewModel(booking.BookingId, booking.ExpiresAt, clock.GetUtcNow().UtcDateTime, total);
+            await transaction.CommitAsync(ct);
+            result = new HoldResultViewModel
+            {
+                BookingId = booking.BookingId,
+                ExpiresAt = AsUtc(booking.ExpiresAt),
+                ServerNow = DateTime.UtcNow,
+                TotalAmount = total
+            };
         }
-        catch (BookingException)
+        catch
         {
-            // Hoàn tác toàn bộ: không để lại ghế giữ dở hay đơn không có ghế.
-            await tx.RollbackAsync(ct);
+            await transaction.RollbackAsync(CancellationToken.None);
+            context.ChangeTracker.Clear();
             throw;
         }
+        // Chỉ thông báo sau khi dữ liệu được lưu thành công.
+        await NotifySeatsChangedAsync(request.ShowtimeId);
+        return result;
     }
 
-    /// <summary>Bỏ chọn toàn bộ ghế: giải phóng ghế và chuyển đơn sang trạng thái đã hủy.</summary>
-    private async Task<HoldResultViewModel> ReleaseSelectionAsync(int userId, int? bookingId, CancellationToken ct)
-    {
-        var now = clock.GetUtcNow().UtcDateTime;
-        if (bookingId is not int id) return new HoldResultViewModel(null, null, now, 0m);
+    // 3. THANH TOÁN GIẢ LẬP — không gọi cổng thanh toán thật.
 
-        var booking = await LoadOwnedPendingBookingAsync(userId, id, now, ct);
-        if (booking is null) return new HoldResultViewModel(null, null, now, 0m);
-
-        await seats.ReleaseAllAsync(booking.BookingId, ct);
-        booking.Status = BookingStates.BookingCancelled;
-        booking.TotalAmount = 0m;
-        await db.SaveChangesAsync(ct);
-
-        await NotifySafelyAsync(booking.ShowtimeId, ct);
-        return new HoldResultViewModel(null, null, clock.GetUtcNow().UtcDateTime, 0m);
-    }
-
-    // ==================================================================
-    // 3. Thanh toán giả lập (FR-09)
-    // ==================================================================
-
-    /// <summary>
-    /// Thực hiện thanh toán. Trả về trạng thái của đơn sau khi xử lý.
-    /// Gọi lại khi đơn đã xác nhận sẽ trả về <c>Confirmed</c> mà không tạo thêm thanh toán hay vé.
-    /// </summary>
     public async Task<string> PayAsync(int userId, SimulatedPaymentRequest request, CancellationToken ct = default)
     {
-        var now = clock.GetUtcNow().UtcDateTime;
-        await EnsureActiveCustomerAsync(userId, ct);
-
-        if (request.Outcome is not ("Success" or "Failed" or "Cancelled"))
+        var customerId = await GetActiveCustomerIdAsync(userId, ct);
+        if (request.Outcome != "Success" && request.Outcome != "Failed" && request.Outcome != "Cancelled")
             throw new BookingException("Kết quả thanh toán không hợp lệ.", 400);
+        if (request.Method != "VNPay_Simulated" && request.Method != "MoMo_Simulated")
+            throw new BookingException("Phương thức thanh toán không hợp lệ.", 400);
 
-        var booking = await db.Bookings
-            .Include(b => b.Customer)
-            .FirstOrDefaultAsync(b => b.BookingId == request.BookingId && b.Customer != null
-                                     && b.Customer.UserId == userId, ct);
-
-        if (booking is null)
-            throw new BookingException("Không tìm thấy đơn đặt vé của bạn.", 404);
-
-        // Đơn đã xác nhận: trả về kết quả cũ, không phát vé lần hai (idempotent).
-        if (booking.Status == BookingStates.BookingConfirmed)
-            return BookingStates.BookingConfirmed;
-
-        if (booking.Status != BookingStates.BookingPending)
-            throw new BookingException("Đơn đặt vé không còn hiệu lực để thanh toán.", 409);
-
-        // Hết hạn giữ ghế: đánh dấu hết hạn và trả ghế về trạng thái trống.
-        if (booking.ExpiresAt <= now)
-        {
-            await ExpireBookingAsync(booking, ct);
-            throw new BookingException("Đơn đặt vé đã hết thời gian giữ ghế. Vui lòng chọn ghế lại.", 409);
-        }
-
-        var outcome = request.Outcome;
-
-        if (outcome == "Failed")
-            return await HandleFailedPaymentAsync(booking, request, ct);
-
-        if (outcome == "Cancelled")
-            return await HandleCancelledPaymentAsync(booking, request, ct);
-
-        return await HandleSuccessfulPaymentAsync(booking, request, now, ct);
-    }
-
-    /// <summary>
-    /// Thanh toán thất bại: ghi nhận giao dịch lỗi, giữ nguyên ghế và hạn giữ để khách thử lại.
-    /// Đơn không được chuyển sang trạng thái xác nhận.
-    /// </summary>
-    private async Task<string> HandleFailedPaymentAsync(Booking booking, SimulatedPaymentRequest request, CancellationToken ct)
-    {
-        var result = await gateway.ChargeAsync(booking.BookingId, booking.BookingCode, booking.TotalAmount,
-            request.Method, request.Outcome, ct);
-
-        db.Payments.Add(new Payment
-        {
-            BookingId = booking.BookingId,
-            PaymentCode = await GeneratePaymentCodeAsync(ct),
-            Provider = request.Method,
-            TransactionRef = result.TransactionRef,
-            Amount = booking.TotalAmount,
-            PaymentMethod = request.Method,
-            PaymentStatus = BookingStates.PaymentFailed,
-            CreatedAt = clock.GetUtcNow().UtcDateTime,
-            PaidAt = null // CHECK constraint: chỉ giao dịch thành công mới có PaidAt.
-        });
-        await db.SaveChangesAsync(ct);
-
-        Logger.LogInformation("Thanh toán thất bại cho đơn {BookingCode}. Ghế vẫn được giữ đến {ExpiresAt:o}.",
-            booking.BookingCode, booking.ExpiresAt);
-        return BookingStates.BookingPending;
-    }
-
-    /// <summary>Khách hủy thanh toán: giải phóng ghế và hủy đơn.</summary>
-    private async Task<string> HandleCancelledPaymentAsync(Booking booking, SimulatedPaymentRequest request, CancellationToken ct)
-    {
-        var result = await gateway.ChargeAsync(booking.BookingId, booking.BookingCode, booking.TotalAmount,
-            request.Method, request.Outcome, ct);
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+        Booking booking;
+        var resultStatus = "Pending";
         try
         {
-            await seats.ReleaseAllAsync(booking.BookingId, ct);
-
-            booking.Status = BookingStates.BookingCancelled;
-            db.Payments.Add(new Payment
+            booking = await LockOwnedBookingAsync(customerId, request.BookingId, ct);
+            if (booking.Status == "Confirmed")
             {
-                BookingId = booking.BookingId,
-                PaymentCode = await GeneratePaymentCodeAsync(ct),
-                Provider = request.Method,
-                TransactionRef = result.TransactionRef,
-                Amount = booking.TotalAmount,
-                PaymentMethod = request.Method,
-                PaymentStatus = BookingStates.PaymentCancelled,
-                CreatedAt = clock.GetUtcNow().UtcDateTime,
-                PaidAt = null
-            });
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-        }
-        catch (BookingException)
-        {
-            await tx.RollbackAsync(ct);
-            throw;
-        }
+                // Bấm lần nữa chỉ trả kết quả cũ, không tạo thêm Payment hoặc Ticket.
+                await transaction.CommitAsync(ct);
+                return "Confirmed";
+            }
+            CheckPendingBooking(booking);
 
-        await NotifySafelyAsync(booking.ShowtimeId, ct);
-        return BookingStates.BookingCancelled;
-    }
-
-    /// <summary>
-    /// Thanh toán thành công: chuyển đơn sang xác nhận, ghế sang đã bán và phát vé — tất cả trong
-    /// một transaction để không xảy ra trường hợp có vé nhưng ghế lại chưa bán.
-    /// </summary>
-    private async Task<string> HandleSuccessfulPaymentAsync(Booking booking, SimulatedPaymentRequest request,
-        DateTime now, CancellationToken ct)
-    {
-        var result = await gateway.ChargeAsync(booking.BookingId, booking.BookingCode, booking.TotalAmount,
-            request.Method, request.Outcome, ct);
-
-        // Ghế đang thực sự do đơn này giữ (đọc trước khi chuyển sang đã bán).
-        var heldSeats = await db.ShowtimeSeats
-            .Where(ss => ss.ShowtimeId == booking.ShowtimeId
-                     && ss.HeldByBookingId == booking.BookingId
-                     && ss.Status == BookingStates.SeatHeld)
-            .Select(ss => new { ss.ShowtimeSeatId, ss.Price })
-            .ToListAsync(ct);
-
-        if (heldSeats.Count == 0)
-            throw new BookingException("Ghế của đơn đã được giải phóng. Vui lòng chọn ghế và thanh toán lại.", 409);
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        try
-        {
-            // Cập nhật đơn trước. RowVersion làm nhiệm vụ chống thanh toán trùng:
-            // nếu hai request thanh toán chạy song song, request thua sẽ bị từ chối cập nhật.
-            booking.Status = BookingStates.BookingConfirmed;
-            await db.SaveChangesAsync(ct);
-
-            // Chuyển ghế sang đã bán; nếu thiếu ghế nghĩa là đã mất quyền giữ -> hủy giao dịch.
-            var soldCount = await seats.MarkSoldAsync(booking.BookingId, booking.ShowtimeId, ct);
-            if (soldCount != heldSeats.Count)
-                throw new BookingException("Một hoặc nhiều ghế không còn được giữ. Thanh toán không thực hiện được.", 409);
-
-            db.Payments.Add(new Payment
+            if (request.Outcome == "Cancelled")
             {
-                BookingId = booking.BookingId,
-                PaymentCode = await GeneratePaymentCodeAsync(ct),
-                Provider = request.Method,
-                TransactionRef = result.TransactionRef,
-                Amount = booking.TotalAmount,
-                PaymentMethod = request.Method,
-                PaymentStatus = BookingStates.PaymentSuccess,
-                CreatedAt = now,
-                PaidAt = now
-            });
-
-            // Phát mỗi ghế một vé, mã vé duy nhất và suy ra được từ mã đơn.
-            var ticketCodes = new List<string>();
-            foreach (var seat in heldSeats)
+                await context.Bookings.Where(b => b.BookingId == booking.BookingId)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, "Cancelled"), ct);
+                await ReleaseHeldSeatsAsync(booking.BookingId, ct);
+                resultStatus = "Cancelled";
+            }
+            else
             {
-                var code = $"TK-{booking.BookingCode}-{seat.ShowtimeSeatId}";
-                ticketCodes.Add(code);
-                db.Tickets.Add(new Ticket
+                var showtime = await GetOpenShowtimeAsync(booking.ShowtimeId, ct);
+                if (showtime == null) throw new BookingException("Suất chiếu không còn mở bán.");
+
+                var heldSeats = await context.ShowtimeSeats.AsNoTracking()
+                    .Where(s => s.HeldByBookingId == booking.BookingId && s.Status == "Held")
+                    .OrderBy(s => s.ShowtimeSeatId).ToListAsync(ct);
+                if (heldSeats.Count == 0 || heldSeats.Any(s => s.HoldExpiresAt <= DateTime.UtcNow)
+                    || heldSeats.Sum(s => s.Price) != booking.TotalAmount)
+                    throw new BookingException("Ghế hoặc giá vé đã thay đổi. Vui lòng chọn lại.");
+
+                if (request.Outcome == "Success")
                 {
-                    TicketCode = code,
-                    BookingId = booking.BookingId,
-                    ShowtimeSeatId = seat.ShowtimeSeatId,
-                    ShowtimeId = booking.ShowtimeId,
-                    Price = seat.Price,
-                    Status = "Valid",
-                    IssuedAt = now
-                });
+                    foreach (var seat in heldSeats)
+                    {
+                        var now = DateTime.UtcNow;
+                        var sold = await context.ShowtimeSeats
+                            .Where(s => s.ShowtimeSeatId == seat.ShowtimeSeatId && s.Status == "Held"
+                                && s.HeldByBookingId == booking.BookingId && s.HoldExpiresAt > now
+                                && s.Seat.Status == "Active" && s.Seat.SeatType.IsActive)
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(s => s.Status, "Sold")
+                                .SetProperty(s => s.HeldByBookingId, (int?)null)
+                                .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
+                        if (sold != 1) throw new BookingException("Ghế không còn được giữ cho đơn này.");
+
+                        context.Tickets.Add(new Ticket
+                        {
+                            TicketCode = "TK-" + Guid.NewGuid().ToString("N"),
+                            BookingId = booking.BookingId,
+                            ShowtimeId = booking.ShowtimeId,
+                            ShowtimeSeatId = seat.ShowtimeSeatId,
+                            Price = seat.Price,
+                            Status = "Valid",
+                            IssuedAt = now
+                        });
+                    }
+
+                    // Kiểm tra lại sau khi đợi khóa, tránh phát vé khi hạn giữ vừa kết thúc.
+                    var checkTime = DateTime.UtcNow;
+                    var confirmed = await context.Bookings
+                        .Where(b => b.BookingId == booking.BookingId && b.Status == "Pending" && b.ExpiresAt > checkTime
+                            && b.Showtime.Status == "Scheduled" && b.Showtime.StartAt > checkTime
+                            && b.Showtime.Movie.Status == "Showing" && b.Showtime.Auditorium.Status == "Active")
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, "Confirmed"), ct);
+                    if (confirmed != 1) throw new BookingException("Hết thời gian thanh toán hoặc suất chiếu đã đóng.");
+                    resultStatus = "Confirmed";
+                }
+                // Nếu Failed, giữ nguyên Pending và hạn giữ để khách thử lại.
             }
 
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-
-            await NotifySafelyAsync(booking.ShowtimeId, ct);
-            await emailSender.SendAsync(booking.BookingCode, ticketCodes, ct);
-
-            Logger.LogInformation("Thanh toán thành công cho đơn {BookingCode}, phát {TicketCount} vé.",
-                booking.BookingCode, ticketCodes.Count);
-            return BookingStates.BookingConfirmed;
+            var payment = new Payment
+            {
+                BookingId = booking.BookingId,
+                PaymentCode = "PM-" + Guid.NewGuid().ToString("N"),
+                Provider = request.Method,
+                TransactionRef = Guid.NewGuid().ToString("N"),
+                Amount = booking.TotalAmount,
+                PaymentMethod = request.Method,
+                PaymentStatus = request.Outcome,
+                CreatedAt = DateTime.UtcNow
+            };
+            if (request.Outcome == "Success") payment.PaidAt = DateTime.UtcNow;
+            context.Payments.Add(payment);
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
         }
-        catch (BookingException)
+        catch
         {
-            await tx.RollbackAsync(ct);
+            // Đơn, ghế, thanh toán và vé phải cùng rollback nếu một bước thất bại.
+            await transaction.RollbackAsync(CancellationToken.None);
+            context.ChangeTracker.Clear();
             throw;
         }
-        catch (DbUpdateConcurrencyException)
-        {
-            // Request thua trong cuộc đua thanh toán: đơn có thể đã được xác nhận bởi request kia.
-            await tx.RollbackAsync(ct);
-            var current = await db.Bookings.AsNoTracking()
-                .Where(b => b.BookingId == booking.BookingId)
-                .Select(b => b.Status)
-                .FirstOrDefaultAsync(ct);
 
-            if (current == BookingStates.BookingConfirmed) return BookingStates.BookingConfirmed;
-            throw new BookingException("Đơn đặt vé vừa được xử lý bởi thao tác khác. Vui lòng tải lại trang.", 409);
+        await NotifySeatsChangedAsync(booking.ShowtimeId);
+        if (resultStatus == "Confirmed")
+        {
+            // Email chỉ giả lập qua log theo spec; khách xem QR tại trang Vé của tôi.
+            logger.LogInformation("Email giả lập: đơn {BookingCode} đã thanh toán và có vé điện tử.", booking.BookingCode);
         }
+        return resultStatus;
     }
 
-    // ==================================================================
-    // 4. Hủy đơn
-    // ==================================================================
+    // 4. HỦY ĐƠN VÀ GIẢI PHÓNG GHẾ HẾT HẠN
 
-    /// <summary>Hủy đơn đang giữ ghế và trả ghế về trạng thái trống.</summary>
     public async Task CancelAsync(int userId, int bookingId, CancellationToken ct = default)
     {
-        var now = clock.GetUtcNow().UtcDateTime;
-        await EnsureActiveCustomerAsync(userId, ct);
+        var customerId = await GetActiveCustomerIdAsync(userId, ct);
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+        Booking booking;
+        try
+        {
+            booking = await LockOwnedBookingAsync(customerId, bookingId, ct);
+            if (booking.Status != "Pending" && booking.Status != "Cancelled" && booking.Status != "Expired")
+                throw new BookingException("Không thể hủy đơn đã thanh toán.");
 
-        var booking = await db.Bookings
-            .Include(b => b.Customer)
-            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.Customer != null
-                                     && b.Customer.UserId == userId, ct);
-
-        if (booking is null)
-            throw new BookingException("Không tìm thấy đơn đặt vé của bạn.", 404);
-
-        if (booking.Status == BookingStates.BookingConfirmed)
-            throw new BookingException("Đơn đã thanh toán không thể hủy. Vui lòng liên hệ quầy vé.", 409);
-
-        if (booking.Status != BookingStates.BookingPending)
-            throw new BookingException("Đơn đặt vé không còn hiệu lực để hủy.", 409);
-
-        await seats.ReleaseAllAsync(booking.BookingId, ct);
-        booking.Status = BookingStates.BookingCancelled;
-        await db.SaveChangesAsync(ct);
-
-        await NotifySafelyAsync(booking.ShowtimeId, ct);
+            await context.Bookings.Where(b => b.BookingId == bookingId && b.Status == "Pending")
+                .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, "Cancelled"), ct);
+            await ReleaseHeldSeatsAsync(bookingId, ct);
+            await transaction.CommitAsync(ct);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+        await NotifySeatsChangedAsync(booking.ShowtimeId);
     }
 
-    // ==================================================================
-    // 5. Worker giải phóng ghế hết hạn
-    // ==================================================================
-
-    /// <summary>
-    /// Quét và giải phóng các đơn đã hết hạn giữ ghế.
-    /// Dùng UPDATE có điều kiện trạng thái nên nếu thanh toán xảy ra đồng thời và thắng,
-    /// worker sẽ không ghi đè đơn đã xác nhận.
-    /// </summary>
     public async Task<int> ReleaseExpiredAsync(CancellationToken ct = default)
     {
-        var now = clock.GetUtcNow().UtcDateTime;
+        var now = DateTime.UtcNow;
+        var expiredBookings = await context.Bookings.AsNoTracking()
+            .Where(b => b.Status == "Pending" && b.ExpiresAt <= now)
+            .OrderBy(b => b.BookingId).Take(200).ToListAsync(ct);
 
-        var expiredIds = await db.Bookings
-            .AsNoTracking()
-            .Where(b => b.Status == BookingStates.BookingPending && b.ExpiresAt <= now)
-            .Select(b => b.BookingId)
-            .ToListAsync(ct);
-
-        var affected = 0;
-        foreach (var id in expiredIds)
+        var count = 0;
+        foreach (var booking in expiredBookings)
         {
-            // Chỉ chuyển sang Expired nếu đơn vẫn còn ở trạng thái Pending.
-            var changed = await db.Bookings
-                .Where(b => b.BookingId == id && b.Status == BookingStates.BookingPending && b.ExpiresAt <= now)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, BookingStates.BookingExpired), ct);
-
-            if (changed == 0) continue; // Thanh toán đã thắng cuộc đua, đơn không còn hết hạn.
-
-            // Chỉ giải phóng ghế vẫn còn thuộc đơn này (ghế đã bị người khác giành lại thì giữ nguyên).
-            await seats.ReleaseAllAsync(id, ct);
-            affected++;
+            // Mỗi đơn một transaction. Worker khóa đơn trước, ghế sau như thanh toán/hủy.
+            await using var transaction = await context.Database.BeginTransactionAsync(ct);
+            var changed = await context.Bookings
+                .Where(b => b.BookingId == booking.BookingId && b.Status == "Pending" && b.ExpiresAt <= now)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, "Expired"), ct);
+            if (changed == 1)
+            {
+                await ReleaseHeldSeatsAsync(booking.BookingId, ct);
+                count++;
+            }
+            await transaction.CommitAsync(ct);
+            if (changed == 1) await NotifySeatsChangedAsync(booking.ShowtimeId);
         }
-
-        if (affected > 0)
-            Logger.LogInformation("Đã giải phóng {Count} đơn hết hạn giữ ghế.", affected);
-
-        return affected;
+        return count;
     }
 
-    // ==================================================================
-    // 6. Vé điện tử
-    // ==================================================================
+    // 5. XEM ĐƠN VÀ VÉ — luôn kiểm tra chủ sở hữu tại server.
 
-    /// <summary>
-    /// Sinh ảnh QR cho một vé. Kiểm tra chủ sở hữu: chỉ chính khách đặt vé mới tải được ảnh.
-    /// </summary>
+    public async Task<BookingDetailsViewModel?> GetBookingAsync(int userId, int bookingId, CancellationToken ct = default)
+    {
+        var customerId = await GetActiveCustomerIdAsync(userId, ct);
+        var booking = await GetBookingDetailsQuery(customerId)
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
+        if (booking == null) return null;
+        return CreateBookingViewModel(booking);
+    }
+
+    public async Task<IReadOnlyList<BookingDetailsViewModel>> GetMyBookingsAsync(int userId, CancellationToken ct = default)
+    {
+        var customerId = await GetActiveCustomerIdAsync(userId, ct);
+        var bookings = await GetBookingDetailsQuery(customerId)
+            .OrderByDescending(b => b.Showtime.StartAt).ThenByDescending(b => b.BookingId).ToListAsync(ct);
+        var result = new List<BookingDetailsViewModel>();
+        foreach (var booking in bookings)
+        {
+            result.Add(CreateBookingViewModel(booking));
+        }
+        return result;
+    }
+
     public async Task<byte[]?> GetTicketQrAsync(int userId, int ticketId, CancellationToken ct = default)
     {
-        var ticketCode = await db.Tickets
-            .AsNoTracking()
-            .Where(t => t.TicketId == ticketId && t.Booking.Customer != null && t.Booking.Customer.UserId == userId)
-            .Select(t => t.TicketCode)
-            .FirstOrDefaultAsync(ct);
+        var customerId = await GetActiveCustomerIdAsync(userId, ct);
+        var ticket = await context.Tickets.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TicketId == ticketId && t.Booking.CustomerId == customerId
+                && t.Booking.BookingChannel == "Online" && t.Booking.Status == "Confirmed" && t.Status != "Cancelled", ct);
+        if (ticket == null) return null;
 
-        if (ticketCode is null) return null;
-
-        // Nội dung mã QR chính là mã vé đã lưu, dùng để tra cứu tại quầy.
-        return qr.GeneratePng(ticketCode);
+        // QRCoder tạo ảnh PNG trực tiếp từ mã vé, không cần thêm interface/lớp bọc.
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(ticket.TicketCode, QRCodeGenerator.ECCLevel.Q);
+        using var image = new PngByteQRCode(data);
+        return image.GetGraphic(8);
     }
 
-    // ==================================================================
-    // Nội bộ dùng chung
-    // ==================================================================
+    // CÁC HÀM NHỎ DÙNG CHUNG — chỉ tách những đoạn được gọi nhiều lần.
 
-    /// <summary>
-    /// Đảm bảo người dùng là khách hàng còn hoạt động.
-    /// Lớp bảo vệ bắt buộc vì mọi thao tác ghi đều dựa trên userId lấy từ Session.
-    /// </summary>
-    private async Task EnsureActiveCustomerAsync(int userId, CancellationToken ct)
+    private async Task<int> GetActiveCustomerIdAsync(int userId, CancellationToken ct)
     {
-        if (userId <= 0)
-            throw new BookingException("Bạn cần đăng nhập để thực hiện thao tác này.", 403);
-
-        var valid = await db.Customers
-            .AsNoTracking()
-            .AnyAsync(c => c.UserId == userId && c.User.Status == "Active", ct);
-
-        if (!valid)
-            throw new BookingException("Tài khoản không hợp lệ hoặc đã bị khóa.", 403);
+        // Session có thể còn hiệu lực sau khi tài khoản bị khóa, vì vậy cần kiểm tra DB.
+        var customer = await context.Customers.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.User.Status == "Active"
+                && c.User.Role.RoleName == "Customer", ct);
+        if (customer == null) throw new BookingException("Tài khoản khách hàng không hợp lệ hoặc đã bị khóa.", 403);
+        return customer.CustomerId;
     }
 
-    private Task<int> GetCustomerIdAsync(int userId, CancellationToken ct) =>
-        db.Customers.AsNoTracking().Where(c => c.UserId == userId).Select(c => c.CustomerId).FirstAsync(ct);
-
-    /// <summary>Lấy đơn đang chờ thanh toán của chính khách; null nếu không thuộc về khách hoặc đã hết hạn.</summary>
-    private Task<Booking?> LoadOwnedPendingBookingAsync(int userId, int bookingId, DateTime now, CancellationToken ct) =>
-        db.Bookings
-            .Include(b => b.Customer)
-            .FirstOrDefaultAsync(b => b.BookingId == bookingId
-                                  && b.Status == BookingStates.BookingPending
-                                  && b.ExpiresAt > now
-                                  && b.Customer != null && b.Customer.UserId == userId, ct);
-
-    /// <summary>
-    /// Đánh dấu đơn hết hạn và trả ghế về trạng thái trống.
-    /// Dùng UPDATE có điều kiện trạng thái nên không phát sinh xung đột phiên bản khi
-    /// worker đang chạy song song với yêu cầu thanh toán của khách.
-    /// </summary>
-    private async Task ExpireBookingAsync(Booking booking, CancellationToken ct)
+    private async Task<Showtime?> GetOpenShowtimeAsync(int showtimeId, CancellationToken ct)
     {
-        await seats.ReleaseAllAsync(booking.BookingId, ct);
-
-        // Chỉ đơn còn ở trạng thái Pending mới được chuyển sang Expired.
-        await db.Bookings
-            .Where(b => b.BookingId == booking.BookingId && b.Status == BookingStates.BookingPending)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, BookingStates.BookingExpired), ct);
-
-        await NotifySafelyAsync(booking.ShowtimeId, ct);
+        var now = DateTime.UtcNow;
+        return await context.Showtimes.AsNoTracking()
+            .Include(s => s.Movie).Include(s => s.Auditorium)
+            .FirstOrDefaultAsync(s => s.ShowtimeId == showtimeId && s.Status == "Scheduled"
+                && s.StartAt > now && s.Movie.Status == "Showing" && s.Auditorium.Status == "Active", ct);
     }
 
-    /// <summary>
-    /// Phát tín hiệu SignalR cho các trình duyệt khác.
-    /// Lỗi phát tín hiệu không được làm hỏng giao dịch đã commit nên được nuốt và ghi log.
-    /// </summary>
-    private async Task NotifySafelyAsync(int showtimeId, CancellationToken ct)
+    private async Task<Booking> LockOwnedBookingAsync(int customerId, int bookingId, CancellationToken ct)
+    {
+        // Phải gọi trong transaction. UPDATE giữ nguyên Pending nhưng khóa dòng đơn đến commit.
+        // Request thứ hai trên cùng đơn phải chờ, sau đó đọc lại trạng thái mới nhất.
+        await context.Bookings
+            .Where(b => b.BookingId == bookingId && b.CustomerId == customerId
+                && b.BookingChannel == "Online" && b.Status == "Pending")
+            .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.Status, "Pending"), ct);
+
+        var booking = await context.Bookings.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.CustomerId == customerId
+                && b.BookingChannel == "Online", ct);
+        if (booking == null) throw new BookingException("Không tìm thấy đơn đặt vé của bạn.", 404);
+        return booking;
+    }
+
+    private static void CheckPendingBooking(Booking booking)
+    {
+        if (booking.Status != "Pending" || booking.ExpiresAt <= DateTime.UtcNow)
+            throw new BookingException("Đơn đã hết hạn hoặc không còn chờ thanh toán. Vui lòng chọn ghế lại.");
+    }
+
+    private async Task ReleaseHeldSeatsAsync(int bookingId, CancellationToken ct)
+    {
+        // Không nhả ghế Sold hoặc ghế hết hạn đã được đơn khác giữ lại.
+        await context.ShowtimeSeats
+            .Where(s => s.HeldByBookingId == bookingId && s.Status == "Held")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(s => s.Status, "Available")
+                .SetProperty(s => s.HeldByBookingId, (int?)null)
+                .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
+    }
+
+    private async Task NotifySeatsChangedAsync(int showtimeId)
     {
         try
         {
-            await notifier.NotifyAsync(showtimeId, ct);
+            await hubContext.Clients.Group(SeatHub.GroupName(showtimeId))
+                .SendAsync("SeatStatusChanged", new { showtimeId });
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Không gửi được tín hiệu SignalR cho suất chiếu {ShowtimeId}.", showtimeId);
+            // DB đã commit: không báo thanh toán lỗi chỉ vì SignalR mất kết nối.
+            // Trình duyệt vẫn có thể tải lại sơ đồ bằng HTTP.
+            logger.LogWarning(ex, "Không gửi được cập nhật sơ đồ suất {ShowtimeId}.", showtimeId);
         }
     }
 
-    /// <summary>Sinh mã đơn dạng BK-<ngày>-<mã ngẫu nhiên>, đảm bảo duy nhất.</summary>
-    private async Task<string> GenerateBookingCodeAsync(CancellationToken ct)
+    private IQueryable<Booking> GetBookingDetailsQuery(int customerId)
     {
-        for (var attempt = 0; attempt < 5; attempt++)
-        {
-            var code = $"BK-{clock.GetUtcNow():yyyyMMdd}-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}";
-            var exists = await db.Bookings.AsNoTracking().AnyAsync(b => b.BookingCode == code, ct);
-            if (!exists) return code;
-        }
-
-        throw new BookingException("Không tạo được mã đặt vé. Vui lòng thử lại.", 500);
+        // Dùng chung Include cho trang chi tiết và danh sách; Where vẫn luôn lọc chủ đơn.
+        return context.Bookings.AsNoTracking().AsSplitQuery()
+            .Where(b => b.CustomerId == customerId && b.BookingChannel == "Online")
+            .Include(b => b.Customer).ThenInclude(c => c!.User)
+            .Include(b => b.Showtime).ThenInclude(s => s.Movie)
+            .Include(b => b.Showtime).ThenInclude(s => s.Auditorium)
+            .Include(b => b.HeldShowtimeSeats).ThenInclude(s => s.Seat).ThenInclude(s => s.SeatType)
+            .Include(b => b.Tickets).ThenInclude(t => t.ShowtimeSeat).ThenInclude(s => s.Seat).ThenInclude(s => s.SeatType);
     }
 
-    /// <summary>Sinh mã giao dịch thanh toán duy nhất.</summary>
-    private async Task<string> GeneratePaymentCodeAsync(CancellationToken ct)
+    private static MovieCardViewModel CreateMovieViewModel(Movie movie)
     {
-        for (var attempt = 0; attempt < 5; attempt++)
+        return new MovieCardViewModel
         {
-            var code = $"PM-{Guid.NewGuid().ToString("N")[..16].ToUpperInvariant()}";
-            var exists = await db.Payments.AsNoTracking().AnyAsync(p => p.PaymentCode == code, ct);
-            if (!exists) return code;
+            MovieId = movie.MovieId,
+            Title = movie.Title,
+            Description = movie.Description,
+            DurationMinutes = movie.DurationMinutes,
+            AgeRating = movie.AgeRating,
+            PosterUrl = movie.PosterUrl
+        };
+    }
+
+    private static BookingDetailsViewModel CreateBookingViewModel(Booking booking)
+    {
+        var model = new BookingDetailsViewModel
+        {
+            BookingId = booking.BookingId,
+            BookingCode = booking.BookingCode,
+            ShowtimeId = booking.ShowtimeId,
+            MovieTitle = booking.Showtime.Movie.Title,
+            Auditorium = booking.Showtime.Auditorium.Name,
+            StartAt = AsUtc(booking.Showtime.StartAt),
+            Status = booking.Status,
+            ExpiresAt = AsUtc(booking.ExpiresAt),
+            ServerNow = DateTime.UtcNow,
+            TotalAmount = booking.TotalAmount,
+            CustomerName = booking.Customer!.User.FullName,
+            Email = booking.Customer.User.Email
+        };
+        if (booking.Status == "Pending" && booking.ExpiresAt <= model.ServerNow)
+            model.Status = "Expired";
+
+        if (booking.Tickets.Count > 0)
+        {
+            // Sau thanh toán, liên kết giữ ghế đã xóa; lấy ghế từ vé đã phát.
+            foreach (var ticket in booking.Tickets)
+            {
+                var seat = ticket.ShowtimeSeat.Seat;
+                model.Seats.Add(new BookingSeatViewModel
+                {
+                    ShowtimeSeatId = ticket.ShowtimeSeatId,
+                    Label = seat.RowLabel + seat.SeatNumber,
+                    SeatType = seat.SeatType.TypeName,
+                    Price = ticket.Price
+                });
+                model.Tickets.Add(new TicketViewModel
+                {
+                    TicketId = ticket.TicketId,
+                    TicketCode = ticket.TicketCode,
+                    SeatLabel = seat.RowLabel + seat.SeatNumber,
+                    Price = ticket.Price,
+                    Status = ticket.Status
+                });
+            }
+        }
+        else
+        {
+            foreach (var seat in booking.HeldShowtimeSeats)
+            {
+                model.Seats.Add(new BookingSeatViewModel
+                {
+                    ShowtimeSeatId = seat.ShowtimeSeatId,
+                    Label = seat.Seat.RowLabel + seat.Seat.SeatNumber,
+                    SeatType = seat.Seat.SeatType.TypeName,
+                    Price = seat.Price
+                });
+            }
+        }
+        return model;
+    }
+
+    // confirm payment callback from VNPay
+    // confirm payment callback from VNPay
+    public async Task<string> ConfirmPaymentAsync(int bookingId, bool isSuccess, CancellationToken ct)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+        Booking? booking;
+        var resultStatus = "Failed";
+
+        try
+        {
+            // 1. Lấy thông tin đơn hàng
+            booking = await context.Bookings
+                .Include(b => b.HeldShowtimeSeats)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
+
+            if (booking == null) throw new BookingException("Không tìm thấy đơn hàng", 404);
+
+            // Nếu đơn đã Confirmed rồi thì trả về luôn (chống F5)
+            if (booking.Status == "Confirmed")
+            {
+                await transaction.CommitAsync(ct);
+                return "Confirmed";
+            }
+
+            if (booking.Status != "Pending" || booking.ExpiresAt <= DateTime.UtcNow)
+            {
+                throw new BookingException("Đơn đã hết hạn hoặc không còn chờ thanh toán.");
+            }
+
+            if (isSuccess)
+            {
+                // === THANH TOÁN THÀNH CÔNG ===
+                var now = DateTime.UtcNow;
+                var heldSeats = booking.HeldShowtimeSeats.Where(s => s.Status == "Held").ToList();
+
+                if (heldSeats.Count == 0)
+                    throw new BookingException("Không tìm thấy ghế đang giữ cho đơn này.");
+
+                foreach (var seat in heldSeats)
+                {
+                    // Cập nhật ghế thành Sold
+                    var sold = await context.ShowtimeSeats
+                        .Where(s => s.ShowtimeSeatId == seat.ShowtimeSeatId && s.Status == "Held" && s.HeldByBookingId == booking.BookingId)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(s => s.Status, "Sold")
+                            .SetProperty(s => s.HeldByBookingId, (int?)null)
+                            .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
+
+                    if (sold != 1) throw new BookingException("Ghế không còn được giữ cho đơn này.");
+
+                    // Tạo vé
+                    context.Tickets.Add(new Ticket
+                    {
+                        TicketCode = "TK-" + Guid.NewGuid().ToString("N"),
+                        BookingId = booking.BookingId,
+                        ShowtimeId = booking.ShowtimeId,
+                        ShowtimeSeatId = seat.ShowtimeSeatId,
+                        Price = seat.Price,
+                        Status = "Valid",
+                        IssuedAt = now
+                    });
+                }
+
+                // Cập nhật trạng thái đơn
+                booking.Status = "Confirmed";
+
+                // Lưu lịch sử thanh toán
+                var payment = new Payment
+                {
+                    BookingId = booking.BookingId,
+                    PaymentCode = "PM-" + Guid.NewGuid().ToString("N"),
+                    Provider = "VNPay",
+                    TransactionRef = Guid.NewGuid().ToString("N"), // Có thể lưu vnp_TransactionNo từ VNPay nếu muốn
+                    Amount = booking.TotalAmount,
+                    PaymentMethod = "VNPay",
+                    PaymentStatus = "Success",
+                    CreatedAt = now,
+                    PaidAt = now
+                };
+                context.Payments.Add(payment);
+
+                resultStatus = "Confirmed";
+            }
+            else
+            {
+                // Thanh toán thất bại, giữ nguyên Pending để khách thử lại hoặc cho Background Worker quét
+                resultStatus = "Failed";
+            }
+
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            context.ChangeTracker.Clear();
+            throw;
         }
 
-        throw new BookingException("Không tạo được mã giao dịch thanh toán. Vui lòng thử lại.", 500);
+        // Báo SignalR cập nhật lại sơ đồ ghế
+        if (resultStatus == "Confirmed" && booking != null)
+        {
+            await NotifySeatsChangedAsync(booking.ShowtimeId);
+        }
+
+        return resultStatus;
+    }
+
+    private static DateTime AsUtc(DateTime value)
+    {
+        // SQL datetime2 không lưu múi giờ; gắn UTC để JSON có hậu tố Z và JS đếm đúng giờ.
+        return DateTime.SpecifyKind(value, DateTimeKind.Utc);
     }
 }

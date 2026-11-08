@@ -1,38 +1,71 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using PRN222_CinemaManagement.Services;
 
 namespace PRN222_CinemaManagement.Controllers;
 
-/// <summary>Danh mục công khai; mọi thao tác đọc không tạo đơn hay tự giữ ghế.</summary>
+// Khách chưa đăng nhập vẫn xem được phim và sơ đồ ghế.
+// Các action GET chỉ đọc dữ liệu, không tạo đơn hoặc giữ ghế.
 public class MoviesController(IOnlineBookingService bookingService) : Controller
 {
+    // GET: /Movies - Danh sách phim đang mở bán.
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken ct) =>
-        View(await bookingService.GetMoviesAsync(ct));
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        var movies = await bookingService.GetMoviesAsync(ct);
+        return View(movies);
+    }
 
+    // GET: /Movies/Details/5 - Chi tiết phim và các suất chiếu sắp tới.
     [HttpGet]
     public async Task<IActionResult> Details(int id, CancellationToken ct)
     {
         var movie = await bookingService.GetMovieAsync(id, ct);
-        return movie is null ? NotFound("Phim không tồn tại hoặc chưa mở bán.") : View(movie);
+        if (movie == null)
+        {
+            return NotFound("Phim không tồn tại hoặc chưa mở bán.");
+        }
+        return View(movie);
     }
 
+    // GET: /Movies/Seats/5 - Sơ đồ ghế của một suất chiếu.
     [HttpGet]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> Seats(int id, CancellationToken ct)
     {
-        var map = await bookingService.GetSeatMapAsync(id, HttpContext.Session.GetInt32("UserId"), ct);
-        return map is null ? NotFound("Suất chiếu không tồn tại hoặc đã ngừng nhận đặt vé.") : View(map);
+        try
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var map = await bookingService.GetSeatMapAsync(id, userId, ct);
+            if (map == null)
+            {
+                return NotFound("Suất chiếu không tồn tại hoặc đã ngừng nhận đặt vé.");
+            }
+            return View(map);
+        }
+        catch (BookingException ex)
+        {
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
     }
 
-    /// <summary>SignalR chỉ báo có thay đổi; client đọc lại snapshot để không áp dụng sự kiện cũ sai thứ tự.</summary>
+    // GET: /Movies/SeatSnapshot/5 - Đọc lại sơ đồ mới nhất khi có thông báo SignalR.
     [HttpGet]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> SeatSnapshot(int id, CancellationToken ct)
     {
-        var map = await bookingService.GetSeatMapAsync(id, HttpContext.Session.GetInt32("UserId"), ct);
-        return map is null
-            ? NotFound(new { message = "Suất chiếu đã đóng. Vui lòng chọn suất khác." })
-            : Json(map);
+        try
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var map = await bookingService.GetSeatMapAsync(id, userId, ct);
+            if (map == null)
+            {
+                return NotFound(new { message = "Suất chiếu đã đóng. Vui lòng chọn suất khác." });
+            }
+            return Json(map);
+        }
+        catch (BookingException ex)
+        {
+            return StatusCode(ex.StatusCode, new { message = ex.Message });
+        }
     }
 }
