@@ -86,6 +86,9 @@
                                     <button class="btn btn-sm btn-outline-secondary" disabled title="@reason">
                                         Không thể hủy
                                     </button>
+                                    <small class="text-danger d-block mt-1" style="font-size: 0.65rem;" title="@reason">
+                                        (@(reason.Contains("soát") ? "Đã soát vé" : (b.Showtime.StartAt < DateTime.UtcNow ? "Đã qua giờ" : "Sát giờ <60p")))
+                                    </small>
                                 }
                             </td>
                         </tr>

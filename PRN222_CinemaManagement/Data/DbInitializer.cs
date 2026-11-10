@@ -245,7 +245,7 @@ public static class DbInitializer
         }
 
         // 5. Seed Suất chiếu mẫu & Đơn vé mẫu để test demo (UC-10, 11, 12, 14, 18, TEC-06)
-        if (await context.Bookings.CountAsync() < 3)
+        if (!await context.Bookings.AnyAsync(b => b.BookingCode == "BK-ONLINE-SUCCESS01") || await context.Bookings.CountAsync() < 3)
         {
             var customer = await context.Customers.Include(c => c.User).FirstOrDefaultAsync();
             var staff = await context.Staffs.Include(s => s.User).FirstOrDefaultAsync();
@@ -262,7 +262,7 @@ public static class DbInitializer
                 var aud1 = audList[0];
                 var aud2 = audList.Count > 1 ? audList[1] : aud1;
 
-                // Suất chiếu 1: Ngày mai 19:00 (Phim Mai tại Phòng 1) - Có thể hủy
+                // Suất chiếu 1: Ngày mai 19:00 (Phim Mai tại Phòng 1) - Có thể hủy (> 60 phút)
                 var st1 = await context.Showtimes.FirstOrDefaultAsync(s => s.MovieId == movieMai.MovieId && s.AuditoriumId == aud1.AuditoriumId);
                 if (st1 == null)
                 {
@@ -276,6 +276,14 @@ public static class DbInitializer
                         Status = "Scheduled"
                     };
                     context.Showtimes.Add(st1);
+                    await context.SaveChangesAsync();
+                }
+                else
+                {
+                    // Luôn đảm bảo suất chiếu 1 diễn ra vào ngày mai lúc 19:00 để phục vụ demo tính năng HỦY VÉ (> 60 phút)
+                    st1.StartAt = DateTime.UtcNow.AddDays(1).Date.AddHours(19);
+                    st1.EndAt = DateTime.UtcNow.AddDays(1).Date.AddHours(21).AddMinutes(30);
+                    st1.Status = "Scheduled";
                     await context.SaveChangesAsync();
                 }
 
@@ -296,7 +304,7 @@ public static class DbInitializer
                     await context.SaveChangesAsync();
                 }
 
-                // Suất chiếu 3: Sát giờ chiếu hôm nay lúc 14:00 (Phim Panda tại Phòng 1) - Dùng test quy tắc không cho hủy
+                // Suất chiếu 3: Sát giờ chiếu (còn 30 phút nữa chiếu) - Dùng test quy tắc không cho hủy (< 60 phút)
                 var st3 = await context.Showtimes.FirstOrDefaultAsync(s => s.MovieId == moviePanda.MovieId && s.AuditoriumId == aud1.AuditoriumId);
                 if (st3 == null)
                 {
@@ -310,6 +318,14 @@ public static class DbInitializer
                         Status = "Scheduled"
                     };
                     context.Showtimes.Add(st3);
+                    await context.SaveChangesAsync();
+                }
+                else
+                {
+                    // Luôn đảm bảo suất chiếu 3 diễn ra trong 30 phút tới để test quy tắc CHẶN HỦY VÉ (< 60 phút)
+                    st3.StartAt = DateTime.UtcNow.AddMinutes(30);
+                    st3.EndAt = DateTime.UtcNow.AddMinutes(124);
+                    st3.Status = "Scheduled";
                     await context.SaveChangesAsync();
                 }
 
@@ -474,6 +490,69 @@ public static class DbInitializer
                             Price = 80000m,
                             Status = "Cancelled",
                             IssuedAt = DateTime.UtcNow.AddDays(-1)
+                        });
+
+                        await context.SaveChangesAsync();
+                    }
+                }
+
+                // --- Đơn 5: Đơn vé MỚI xem phim "Dune: Hành tinh cát" ngày mai (ĐỦ 100% ĐIỀU KIỆN ĐỂ TEST BẤM NÚT "HỦY VÉ") ---
+                if (!await context.Bookings.AnyAsync(b => b.BookingCode == "BK-ONLINE-SUCCESS01"))
+                {
+                    // Tạo hoặc cập nhật một suất chiếu ngày mai cho Dune tại phòng 2
+                    var stDune = await context.Showtimes.FirstOrDefaultAsync(s => s.MovieId == movieDune.MovieId);
+                    if (stDune == null)
+                    {
+                        stDune = new Showtime
+                        {
+                            MovieId = movieDune.MovieId,
+                            AuditoriumId = aud2.AuditoriumId,
+                            StartAt = DateTime.UtcNow.AddDays(1).Date.AddHours(20),
+                            EndAt = DateTime.UtcNow.AddDays(1).Date.AddHours(22).AddMinutes(45),
+                            BasePrice = 90000m,
+                            Status = "Scheduled"
+                        };
+                        context.Showtimes.Add(stDune);
+                        await context.SaveChangesAsync();
+                    }
+                    else
+                    {
+                        stDune.StartAt = DateTime.UtcNow.AddDays(1).Date.AddHours(20);
+                        stDune.EndAt = DateTime.UtcNow.AddDays(1).Date.AddHours(22).AddMinutes(45);
+                        stDune.Status = "Scheduled";
+                        await context.SaveChangesAsync();
+                    }
+
+                    await EnsureShowtimeSeats(stDune, stDune.AuditoriumId);
+
+                    var seatForDune = await context.ShowtimeSeats.Where(ss => ss.ShowtimeId == stDune.ShowtimeId && ss.Status == "Available").Take(1).ToListAsync();
+                    if (seatForDune.Any())
+                    {
+                        var b5 = new Booking
+                        {
+                            BookingCode = "BK-ONLINE-SUCCESS01",
+                            CustomerId = customer.CustomerId,
+                            ShowtimeId = stDune.ShowtimeId,
+                            BookingDate = DateTime.UtcNow,
+                            ExpiresAt = DateTime.UtcNow.AddDays(1),
+                            TotalAmount = 90000m,
+                            BookingChannel = "Online",
+                            Status = "Confirmed"
+                        };
+                        context.Bookings.Add(b5);
+                        await context.SaveChangesAsync();
+
+                        seatForDune[0].Status = "Sold";
+
+                        context.Tickets.Add(new Ticket
+                        {
+                            BookingId = b5.BookingId,
+                            ShowtimeId = stDune.ShowtimeId,
+                            ShowtimeSeatId = seatForDune[0].ShowtimeSeatId,
+                            TicketCode = "TK-DUNE-B2-7788",
+                            Price = 90000m,
+                            Status = "Valid",
+                            IssuedAt = DateTime.UtcNow
                         });
 
                         await context.SaveChangesAsync();
