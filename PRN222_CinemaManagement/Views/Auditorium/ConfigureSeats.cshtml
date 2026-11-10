@@ -103,8 +103,14 @@
 
                         if (seat.Status == "Broken")
                         {
-                            bgStyle = "background-color: #e2e3e5; border: 1px solid #c4c8cb; opacity: 0.6;";
+                            bgStyle = "background-color: #f8d7da; border: 1px solid #dc3545; opacity: 0.7;";
                             badgeText = "Hỏng";
+                            badgeClass = "badge bg-danger";
+                        }
+                        else if (seat.Status == "Inactive")
+                        {
+                            bgStyle = "background-color: #e9ecef; border: 1px dashed #6c757d; opacity: 0.55;";
+                            badgeText = "Khóa";
                             badgeClass = "badge bg-dark";
                         }
 
@@ -122,11 +128,12 @@
         </div>
 
         <!-- Chú thích loại ghế -->
-        <div class="d-flex justify-content-center gap-3 mt-3 pt-3 border-top small text-muted">
+        <div class="d-flex justify-content-center flex-wrap gap-3 mt-3 pt-3 border-top small text-muted">
             <div><span class="badge bg-secondary">Std</span> Ghế thường (Standard)</div>
             <div><span class="badge bg-warning text-dark">VIP</span> Ghế VIP (x1.2)</div>
             <div><span class="badge bg-danger">Đôi</span> Ghế đôi (Couple)</div>
-            <div><span class="badge bg-dark">Hỏng</span> Ghế hỏng / Không dùng</div>
+            <div><span class="badge bg-danger">Hỏng</span> Ghế hỏng (Broken)</div>
+            <div><span class="badge bg-dark">Khóa</span> Ngừng dùng (Inactive)</div>
         </div>
     </div>
 </form>
