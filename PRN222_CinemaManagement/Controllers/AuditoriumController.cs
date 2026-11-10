@@ -129,7 +129,16 @@ public class AuditoriumController(CinemaDbContext context) : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        auditorium.Name = model.Name.Trim();
+        // Kiểm tra tên phòng chiếu có bị trùng với phòng khác không
+        string roomName = model.Name.Trim();
+        bool isExist = await context.Auditoriums.AnyAsync(a => a.AuditoriumId != model.AuditoriumId && a.Name.ToLower() == roomName.ToLower());
+        if (isExist)
+        {
+            ModelState.AddModelError("Name", "Tên phòng chiếu này đã tồn tại.");
+            return View(model);
+        }
+
+        auditorium.Name = roomName;
         auditorium.Status = model.Status;
         await context.SaveChangesAsync();
 
@@ -172,6 +181,13 @@ public class AuditoriumController(CinemaDbContext context) : Controller
         if (selectedSeatIds == null || selectedSeatIds.Count == 0)
         {
             TempData["ErrorMessage"] = "Vui lòng tick chọn ít nhất một ghế trên sơ đồ trước khi áp dụng.";
+            return RedirectToAction(nameof(ConfigureSeats), new { id = auditoriumId });
+        }
+
+        // Kiểm tra người dùng có chọn thay đổi loại ghế hoặc trạng thái không
+        if ((!seatTypeId.HasValue || seatTypeId.Value <= 0) && string.IsNullOrEmpty(status))
+        {
+            TempData["ErrorMessage"] = "Vui lòng chọn loại ghế mới hoặc trạng thái mới cần áp dụng cho các ghế đã chọn.";
             return RedirectToAction(nameof(ConfigureSeats), new { id = auditoriumId });
         }
 

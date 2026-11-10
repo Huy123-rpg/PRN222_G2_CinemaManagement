@@ -14,10 +14,23 @@
             Đang đăng nhập: <strong>@fullName</strong> | Vai trò: <strong>@role</strong>
         </div>
 
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             @if (role == "Admin")
             {
                 <a asp-controller="Employee" asp-action="Index" class="btn btn-primary">Quản lý nhân viên</a>
+            }
+            @if (role == "CinemaManager" || role == "Admin")
+            {
+                <a asp-controller="Auditorium" asp-action="Index" class="btn btn-primary">Quản lý phòng chiếu</a>
+                <a asp-controller="Pricing" asp-action="Index" class="btn btn-outline-primary">Bảng giá vé</a>
+            }
+            @if (role == "Customer")
+            {
+                <a asp-controller="Ticket" asp-action="MyBookings" class="btn btn-primary">Vé của tôi</a>
+            }
+            @if (role == "Staff" || role == "CinemaManager" || role == "Admin")
+            {
+                <a asp-controller="Ticket" asp-action="StaffLookup" class="btn btn-success">Tra cứu & Soát vé</a>
             }
             <a asp-controller="Account" asp-action="Profile" class="btn btn-outline-secondary">Hồ sơ cá nhân</a>
         </div>

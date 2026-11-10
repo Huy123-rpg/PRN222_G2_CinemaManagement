@@ -62,7 +62,16 @@ public class PricingController(CinemaDbContext context) : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        seatType.TypeName = model.TypeName.Trim();
+        // Kiểm tra tên loại ghế có bị trùng với loại ghế khác không
+        string typeName = model.TypeName.Trim();
+        bool isExist = await context.SeatTypes.AnyAsync(st => st.SeatTypeId != model.SeatTypeId && st.TypeName.ToLower() == typeName.ToLower());
+        if (isExist)
+        {
+            ModelState.AddModelError("TypeName", "Tên loại ghế này đã tồn tại.");
+            return View(model);
+        }
+
+        seatType.TypeName = typeName;
         seatType.Description = model.Description?.Trim();
         seatType.PriceMultiplier = model.PriceMultiplier;
         seatType.IsActive = model.IsActive;

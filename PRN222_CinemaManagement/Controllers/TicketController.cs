@@ -92,11 +92,16 @@ public class TicketController(CinemaDbContext context) : Controller
     {
         int? userId = HttpContext.Session.GetInt32("UserId");
         var customer = await context.Customers.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (customer == null)
+        {
+            TempData["ErrorMessage"] = "Không tìm thấy thông tin khách hàng.";
+            return RedirectToAction(nameof(MyBookings));
+        }
 
         var booking = await context.Bookings
             .Include(b => b.Showtime)
             .Include(b => b.Tickets)
-            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.CustomerId == customer!.CustomerId);
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.CustomerId == customer.CustomerId);
 
         if (booking == null)
         {
@@ -160,6 +165,9 @@ public class TicketController(CinemaDbContext context) : Controller
                     .ThenInclude(ss => ss.Seat)
             .AsQueryable();
 
+        // Sắp xếp đơn mới nhất lên đầu trước khi giới hạn số lượng
+        query = query.OrderByDescending(b => b.BookingDate);
+
         if (!string.IsNullOrWhiteSpace(searchKeyword))
         {
             string kw = searchKeyword.Trim().ToLower();
@@ -176,7 +184,7 @@ public class TicketController(CinemaDbContext context) : Controller
             query = query.Take(20);
         }
 
-        var list = await query.OrderByDescending(b => b.BookingDate).ToListAsync();
+        var list = await query.ToListAsync();
 
         var model = new StaffLookupViewModel
         {
