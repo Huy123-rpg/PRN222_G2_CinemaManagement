@@ -7,6 +7,7 @@ using PRN222_CinemaManagement.Data;
 using PRN222_CinemaManagement.Hubs;
 using PRN222_CinemaManagement.Models.Entities;
 using PRN222_CinemaManagement.Services;
+using PRN222_CinemaManagement.Services.OnlineBooking;
 using Xunit;
 
 namespace OnlineBooking.Tests;
@@ -45,8 +46,17 @@ public class BookingDatabase : IAsyncLifetime
         return new CinemaDbContext(options.Options);
     }
 
-    public static OnlineBookingService Service(CinemaDbContext db, bool failNotification = false) =>
-        new(db, new TestHubContext(failNotification), NullLogger<OnlineBookingService>.Instance);
+    public static OnlineBookingService Service(CinemaDbContext db, bool failNotification = false)
+    {
+        // Cùng một DbContext như các service Scoped của ứng dụng; không mở kết nối riêng giữa các bước.
+        var support = new BookingSupportService(db, new TestHubContext(failNotification),
+            NullLogger<BookingSupportService>.Instance);
+        return new OnlineBookingService(
+            new MovieCatalogService(db, support),
+            new SeatBookingService(db, support),
+            new BookingPaymentService(db, support, NullLogger<BookingPaymentService>.Instance),
+            new BookingTicketService(db, support));
+    }
 
     public async Task<Scenario> SeedAsync()
     {

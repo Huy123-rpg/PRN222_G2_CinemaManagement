@@ -1,6 +1,11 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using PRN222_CinemaManagement.Data;
+using PRN222_CinemaManagement.Hubs;
 using PRN222_CinemaManagement.Models.ViewModels;
 using PRN222_CinemaManagement.Services;
+using PRN222_CinemaManagement.Services.OnlineBooking;
 using Xunit;
 
 namespace OnlineBooking.Tests;
@@ -8,6 +13,54 @@ namespace OnlineBooking.Tests;
 /// <summary>Mỗi thao tác mở DbContext mới như mỗi request HTTP thực tế.</summary>
 public class BookingTests(BookingDatabase database) : IClassFixture<BookingDatabase>
 {
+    [Fact]
+    public async Task Cac_service_duoc_DI_tao_theo_scope_hoan_thanh_luong_giu_ghe_va_thanh_toan()
+    {
+        var s = await database.SeedAsync();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        // Tập trung vào scope nghiệp vụ, không khởi động hạ tầng HTTP/SignalR trong bài test.
+        services.AddSingleton<IHubContext<SeatHub>>(new TestHubContext(false));
+        services.AddScoped<CinemaDbContext>(_ => database.CreateContext());
+        services.AddScoped<BookingSupportService>();
+        services.AddScoped<MovieCatalogService>();
+        services.AddScoped<SeatBookingService>();
+        services.AddScoped<BookingPaymentService>();
+        services.AddScoped<BookingTicketService>();
+        services.AddScoped<IOnlineBookingService, OnlineBookingService>();
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true
+        });
+
+        int bookingId;
+        // Hai scope mô phỏng hai request độc lập; kết quả phải được lưu qua database.
+        await using (var holdScope = provider.CreateAsyncScope())
+        {
+            var service = holdScope.ServiceProvider.GetRequiredService<IOnlineBookingService>();
+            var held = await service.SetSeatsAsync(s.UserId, new SetSeatsRequest
+            {
+                ShowtimeId = s.ShowtimeId, ShowtimeSeatIds = [s.Seats[0], s.Seats[3]]
+            });
+            bookingId = held.BookingId!.Value;
+            Assert.Equal(220_000m, held.TotalAmount);
+        }
+
+        await using (var paymentScope = provider.CreateAsyncScope())
+        {
+            var service = paymentScope.ServiceProvider.GetRequiredService<IOnlineBookingService>();
+            Assert.Equal("Confirmed", await service.PayAsync(s.UserId, new SimulatedPaymentRequest
+            {
+                BookingId = bookingId, Outcome = "Success", Method = "VNPay_Simulated"
+            }));
+            var booking = await service.GetBookingAsync(s.UserId, bookingId);
+            Assert.NotNull(booking);
+            Assert.Equal("Confirmed", booking.Status);
+            Assert.Equal(2, booking.Tickets.Count);
+        }
+    }
+
     private async Task<HoldResultViewModel> Hold(Scenario s, int userId, int[] seatIds, int? bookingId = null, int? showtimeId = null)
     {
         await using var db = database.CreateContext();
@@ -22,6 +75,47 @@ public class BookingTests(BookingDatabase database) : IClassFixture<BookingDatab
         await using var db = database.CreateContext();
         return await BookingDatabase.Service(db).PayAsync(userId,
             new SimulatedPaymentRequest { BookingId = bookingId, Outcome = outcome, Method = "VNPay_Simulated" });
+    }
+
+    [Fact]
+    public async Task VnPay_callback_luu_dung_phuong_thuc_va_co_du_lieu_hien_thi_ve()
+    {
+        var scenario = await database.SeedAsync();
+        var hold = await Hold(scenario, scenario.UserId, [scenario.Seats[0]]);
+        var bookingId = hold.BookingId!.Value;
+
+        // Gọi đúng hàm mà VnPayReturn sử dụng, trên SQL Server có CHECK constraint thật.
+        await using (var db = database.CreateContext())
+        {
+            var status = await BookingDatabase.Service(db)
+                .ConfirmPaymentAsync(bookingId, true, CancellationToken.None);
+            Assert.Equal("Confirmed", status);
+        }
+
+        // F5 callback không được tạo thêm thanh toán hoặc vé.
+        await using (var db = database.CreateContext())
+        {
+            var status = await BookingDatabase.Service(db)
+                .ConfirmPaymentAsync(bookingId, true, CancellationToken.None);
+            Assert.Equal("Confirmed", status);
+        }
+
+        await using var check = database.CreateContext();
+        var payment = Assert.Single(await check.Payments.Where(p => p.BookingId == bookingId).ToListAsync());
+        Assert.Equal("VNPay", payment.Provider);
+        Assert.Equal("VNPay_Simulated", payment.PaymentMethod);
+        Assert.Equal("Success", payment.PaymentStatus);
+        Assert.Equal(hold.TotalAmount, payment.Amount);
+
+        // Trang Success đọc được đơn đã xác nhận, thông tin ghế và ảnh QR của vé.
+        var service = BookingDatabase.Service(check);
+        var details = await service.GetBookingAsync(scenario.UserId, bookingId);
+        Assert.NotNull(details);
+        Assert.Equal("Confirmed", details!.Status);
+        Assert.Single(details.Seats);
+        var ticket = Assert.Single(details.Tickets);
+        Assert.NotNull(await service.GetTicketQrAsync(scenario.UserId, ticket.TicketId));
+        Assert.Equal("Sold", (await check.ShowtimeSeats.FindAsync(scenario.Seats[0]))!.Status);
     }
 
     [Fact]

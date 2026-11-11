@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PRN222_CinemaManagement.Data;
 using PRN222_CinemaManagement.Services;
+using PRN222_CinemaManagement.Services.OnlineBooking;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,7 +14,13 @@ builder.Services.AddDbContext<CinemaDbContext>(options =>
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddHttpContextAccessor();
 
-// Module đặt vé online: đăng ký interface/service giống IPasswordService ở trên.
+// Các nghiệp vụ đặt vé dùng Scoped để cùng chia sẻ DbContext trong một request.
+builder.Services.AddScoped<BookingSupportService>();
+builder.Services.AddScoped<MovieCatalogService>();
+builder.Services.AddScoped<SeatBookingService>();
+builder.Services.AddScoped<BookingPaymentService>();
+builder.Services.AddScoped<BookingTicketService>();
+// Controller và worker vẫn gọi interface cũ qua lớp chuyển tiếp nhỏ.
 builder.Services.AddScoped<IOnlineBookingService, OnlineBookingService>();
 
 // ===== SignalR: kênh cập nhật sơ đồ ghế thời gian thực =====
