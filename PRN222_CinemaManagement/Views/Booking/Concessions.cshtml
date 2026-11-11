@@ -1,0 +1,175 @@
+@model ConcessionSelectionViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Chọn bắp & đồ uống";
+    string CategoryBadgeClass(string category) => category switch
+    {
+        "Combo" => "bg-warning text-dark",
+        "Bắp rang" => "bg-primary-subtle text-primary-emphasis",
+        "Đồ uống" => "bg-info-subtle text-info-emphasis",
+        _ => "bg-secondary-subtle text-secondary-emphasis"
+    };
+}
+
+<nav aria-label="Tiến trình đặt vé" class="booking-steps mb-4">
+    <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="booking-step completed text-decoration-none">
+        1. Chọn ghế
+    </a>
+    <span class="booking-step-sep">→</span>
+    <span class="booking-step active">2. Chọn bắp &amp; đồ uống</span>
+    <span class="booking-step-sep">→</span>
+    <span class="booking-step">3. Xác nhận &amp; thanh toán</span>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+        <h1 class="h3 mb-1">Chọn bắp rang &amp; đồ uống</h1>
+        <p class="text-muted mb-0">Thêm combo, bắp hoặc nước uống cho buổi xem <strong>@Model.MovieTitle</strong> (không bắt buộc).</p>
+    </div>
+</div>
+
+<form id="concession-form" asp-action="Concessions" asp-route-id="@Model.BookingId" method="post">
+    <input type="hidden" name="BookingId" value="@Model.BookingId" />
+
+    <div class="row g-4">
+        <section class="col-lg-8" aria-label="Danh sách bắp và đồ uống">
+            @if (Model.Categories.Count > 1)
+            {
+                <div class="d-flex flex-wrap gap-2 mb-3" role="tablist" aria-label="Phân loại bắp nước">
+                    <button type="button" class="btn btn-sm rounded-pill btn-primary" data-concession-tab="">Tất cả (@Model.Items.Count)</button>
+                    @foreach (var category in Model.Categories)
+                    {
+                        var count = Model.Items.Count(i => i.Category == category);
+                        <button type="button" class="btn btn-sm rounded-pill btn-outline-secondary" data-concession-tab="@category">
+                            @category (@count)
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (Model.Items.Count == 0)
+            {
+                <div class="alert alert-info">Hiện quầy bắp nước chưa có sản phẩm mở bán. Bạn có thể tiếp tục sang bước xác nhận.</div>
+            }
+            else
+            {
+                <div class="row g-3">
+                    @for (var i = 0; i < Model.Items.Count; i++)
+                    {
+                        var item = Model.Items[i];
+                        var soldOut = item.StockQuantity <= 0;
+                        <div class="col-md-6 concession-card-col" data-category="@item.Category">
+                            <article class="card h-100 concession-card shadow-sm @(item.SelectedQuantity > 0 ? "border-primary" : "")">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                                        <span class="badge rounded-pill @CategoryBadgeClass(item.Category)">@item.Category</span>
+                                        <span class="small @(soldOut ? "text-danger fw-semibold" : "text-muted")">
+                                            @(soldOut ? "Hết hàng" : $"Còn {item.StockQuantity}")
+                                        </span>
+                                    </div>
+                                    <h2 class="h6 mb-1">@item.Name</h2>
+                                    @if (!string.IsNullOrWhiteSpace(item.Description))
+                                    {
+                                        <p class="small text-muted mb-3">@item.Description</p>
+                                    }
+
+                                    <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center gap-2">
+                                        <div>
+                                            <strong class="text-primary">@item.Price.ToString("N0") đ</strong>
+                                            <div class="small text-success @(item.SelectedQuantity > 0 ? "" : "d-none")" data-item-subtotal>
+                                                Thành tiền: @((item.Price * item.SelectedQuantity).ToString("N0")) đ
+                                            </div>
+                                        </div>
+
+                                        <input type="hidden" name="Items[@i].ConcessionItemId" value="@item.ConcessionItemId" />
+                                        <div class="input-group input-group-sm concession-stepper">
+                                            <button type="button" class="btn btn-outline-secondary" data-step="-1" disabled="@soldOut" aria-label="Giảm @item.Name">-</button>
+                                            <input type="number"
+                                                   class="form-control text-center"
+                                                   name="Items[@i].Quantity"
+                                                   value="@item.SelectedQuantity"
+                                                   min="0"
+                                                   max="@item.MaxSelectableQuantity"
+                                                   readonly="@soldOut"
+                                                   data-concession-qty
+                                                   data-item-name="@item.Name"
+                                                   data-unit-price="@item.Price.ToString(CultureInfo.InvariantCulture)"
+                                                   aria-label="Số lượng @item.Name" />
+                                            <button type="button" class="btn btn-outline-secondary" data-step="1" disabled="@soldOut" aria-label="Tăng @item.Name">+</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+
+        <aside class="col-lg-4">
+            <div class="card shadow-sm sticky-top" style="top: 1rem;">
+                <div class="card-body">
+                    <p class="small text-muted mb-1">Thời gian giữ ghế còn lại</p>
+                    <p class="display-6 mb-2" data-booking-countdown data-expires-at="@Model.ExpiresAt.ToString("O")" data-server-now="@Model.ServerNow.ToString("O")">--:--</p>
+                    <p class="small text-muted border-bottom pb-3 mb-3">
+                        <strong>@Model.MovieTitle</strong><br />
+                        @Model.Auditorium · @BookingDisplay.VietnamTime(Model.StartAt).ToString("HH:mm · dd/MM/yyyy")
+                    </p>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-semibold">Ghế đã giữ (@Model.Seats.Count)</span>
+                            <strong data-seat-subtotal="@Model.SeatSubtotal.ToString(CultureInfo.InvariantCulture)">@Model.SeatSubtotal.ToString("N0") đ</strong>
+                        </div>
+                        <div class="small text-muted">
+                            @string.Join(", ", Model.Seats.Select(s => $"{s.Label} ({s.SeatType})"))
+                        </div>
+                    </div>
+
+                    <div class="mb-3 border-top pt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-semibold">Bắp &amp; đồ uống</span>
+                            <strong id="concession-subtotal">@Model.ConcessionSubtotal.ToString("N0") đ</strong>
+                        </div>
+                        <ul id="concession-selected-list" class="list-unstyled small text-muted mb-0">
+                            @if (!Model.Items.Any(i => i.SelectedQuantity > 0))
+                            {
+                                <li>Chưa chọn món nào</li>
+                            }
+                            else
+                            {
+                                @foreach (var selected in Model.Items.Where(i => i.SelectedQuantity > 0))
+                                {
+                                    <li class="d-flex justify-content-between">
+                                        <span>@selected.Name × @selected.SelectedQuantity</span>
+                                        <span>@((selected.Price * selected.SelectedQuantity).ToString("N0")) đ</span>
+                                    </li>
+                                }
+                            }
+                        </ul>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center border-top pt-3 mb-3">
+                        <span class="fw-semibold">Tổng cộng</span>
+                        <strong id="concession-grand-total" class="h4 text-primary mb-0">@Model.TotalAmount.ToString("N0") đ</strong>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" data-requires-time>
+                        Tiếp tục xác nhận &amp; thanh toán
+                    </button>
+                    <button type="submit" name="skipFood" value="true" class="btn btn-outline-secondary w-100 mt-2" data-requires-time>
+                        Bỏ qua, chỉ thanh toán vé
+                    </button>
+                    <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="btn btn-link w-100 mt-2">
+                        ← Thay đổi ghế
+                    </a>
+                </div>
+            </div>
+        </aside>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/booking.js" asp-append-version="true"></script>
+}
+

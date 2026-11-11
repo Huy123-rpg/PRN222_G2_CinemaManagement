@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using PRN222_CinemaManagement.Constants;
 
 namespace PRN222_CinemaManagement.Models.ViewModels;
 
@@ -10,7 +11,55 @@ public class MovieCardViewModel
     public string? Description { get; set; }
     public int DurationMinutes { get; set; }
     public string AgeRating { get; set; } = string.Empty;
+    public DateOnly? ReleaseDate { get; set; }
     public string? PosterUrl { get; set; }
+    public IReadOnlyList<string> Genres { get; set; } = Array.Empty<string>();
+    public int UpcomingShowtimeCount { get; set; }
+}
+
+public class MovieFilterViewModel
+{
+    public string? Search { get; set; }
+    public int? GenreId { get; set; }
+    public string? AgeRating { get; set; }
+    public DateOnly? ShowDate { get; set; }
+    public string SortBy { get; set; } = BookingConstants.MovieSortOptions.TitleAsc;
+    public bool OnlyWithShowtimes { get; set; }
+
+    public bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(Search)
+        || GenreId.HasValue
+        || !string.IsNullOrWhiteSpace(AgeRating)
+        || ShowDate.HasValue
+        || OnlyWithShowtimes
+        || (!string.IsNullOrWhiteSpace(SortBy) && SortBy != BookingConstants.MovieSortOptions.TitleAsc);
+}
+
+public class GenreOptionViewModel
+{
+    public int GenreId { get; set; }
+    public string GenreName { get; set; } = string.Empty;
+    public int MovieCount { get; set; }
+}
+
+public class ShowDateOptionViewModel
+{
+    public DateOnly Date { get; set; }
+    public string Label { get; set; } = string.Empty;
+}
+
+public class MovieCatalogViewModel
+{
+    public MovieFilterViewModel Filter { get; set; } = new();
+    public IReadOnlyList<MovieCardViewModel> Movies { get; set; } = Array.Empty<MovieCardViewModel>();
+    public IReadOnlyList<GenreOptionViewModel> Genres { get; set; } = Array.Empty<GenreOptionViewModel>();
+    public IReadOnlyList<string> AgeRatings { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<ShowDateOptionViewModel> ShowDates { get; set; } = Array.Empty<ShowDateOptionViewModel>();
+    public int TotalShowingCount { get; set; }
+
+    public string? SelectedGenreName => Filter.GenreId.HasValue
+        ? Genres.FirstOrDefault(g => g.GenreId == Filter.GenreId.Value)?.GenreName
+        : null;
 }
 
 // Thông tin một suất chiếu để khách hàng chọn giờ xem.
@@ -60,6 +109,16 @@ public class BookingSeatViewModel
     public decimal Price { get; set; }
 }
 
+public class BookingConcessionViewModel
+{
+    public int ConcessionItemId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal UnitPrice { get; set; }
+    public int Quantity { get; set; }
+    public decimal Subtotal => UnitPrice * Quantity;
+}
+
 public class TicketViewModel
 {
     public int TicketId { get; set; }
@@ -85,7 +144,71 @@ public class BookingDetailsViewModel
     public string CustomerName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public List<BookingSeatViewModel> Seats { get; set; } = new List<BookingSeatViewModel>();
+    public List<BookingConcessionViewModel> Concessions { get; set; } = new List<BookingConcessionViewModel>();
     public List<TicketViewModel> Tickets { get; set; } = new List<TicketViewModel>();
+    public string? ConcessionTicketCode { get; set; }
+
+    public decimal SeatSubtotal => Seats.Sum(s => s.Price);
+    public decimal ConcessionSubtotal => Concessions.Sum(c => c.Subtotal);
+}
+
+public class ConcessionOptionViewModel
+{
+    public int ConcessionItemId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int StockQuantity { get; set; }
+    public int MaxSelectableQuantity { get; set; }
+    public int SelectedQuantity { get; set; }
+}
+
+public class ConcessionSelectionViewModel
+{
+    public int BookingId { get; set; }
+    public string BookingCode { get; set; } = string.Empty;
+    public int ShowtimeId { get; set; }
+    public string MovieTitle { get; set; } = string.Empty;
+    public string Auditorium { get; set; } = string.Empty;
+    public DateTime StartAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime ExpiresAt { get; set; }
+    public DateTime ServerNow { get; set; }
+    public List<BookingSeatViewModel> Seats { get; set; } = new List<BookingSeatViewModel>();
+    public List<ConcessionOptionViewModel> Items { get; set; } = new List<ConcessionOptionViewModel>();
+    public IReadOnlyList<string> Categories { get; set; } = Array.Empty<string>();
+
+    public decimal SeatSubtotal => Seats.Sum(s => s.Price);
+    public decimal ConcessionSubtotal => Items.Sum(i => i.Price * i.SelectedQuantity);
+    public decimal TotalAmount => SeatSubtotal + ConcessionSubtotal;
+}
+
+public class ConcessionOrderItemInput
+{
+    [Range(1, int.MaxValue)]
+    public int ConcessionItemId { get; set; }
+
+    [Range(0, BookingConstants.MaxQuantityPerConcessionItem)]
+    public int Quantity { get; set; }
+}
+
+// Chỉ nhận ID sản phẩm và số lượng; đơn giá luôn đọc từ ConcessionItem trong DB.
+public class SetConcessionsRequest
+{
+    [Range(1, int.MaxValue)]
+    public int BookingId { get; set; }
+
+    [MaxLength(100)]
+    public List<ConcessionOrderItemInput> Items { get; set; } = new List<ConcessionOrderItemInput>();
+}
+
+public class ConcessionSelectionResultViewModel
+{
+    public int BookingId { get; set; }
+    public decimal SeatSubtotal { get; set; }
+    public decimal ConcessionSubtotal { get; set; }
+    public decimal TotalAmount { get; set; }
 }
 
 // Kết quả giữ ghế do server tính, gồm hạn giữ cố định và tổng tiền.
@@ -122,12 +245,24 @@ public class SimulatedPaymentRequest
     public string Method { get; set; } = "VNPay_Simulated";
 }
 
+public class PaymentFailedViewModel
+{
+    public BookingDetailsViewModel? Booking { get; set; }
+    public string FailureMessage { get; set; } = string.Empty;
+    public string? ResponseCode { get; set; }
+    public string? TransactionNo { get; set; }
+    public bool CanRetry => Booking != null
+        && Booking.Status == "Pending"
+        && Booking.ExpiresAt > Booking.ServerNow
+        && Booking.Seats.Count > 0;
+}
+
 public static class BookingDisplay
 {
     // Dữ liệu lưu theo UTC, giao diện hiển thị giờ Việt Nam (UTC+7).
     public static DateTime VietnamTime(DateTime utc)
     {
-        return DateTime.SpecifyKind(utc, DateTimeKind.Utc).AddHours(7);
+        return DateTime.SpecifyKind(utc, DateTimeKind.Utc).AddHours(BookingConstants.VietnamUtcOffsetHours);
     }
 
     public static string StatusText(string status)

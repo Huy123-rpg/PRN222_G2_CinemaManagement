@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 
 SPEC_OnlineBooking_Bach.md
+
+# Local test folders
+[Tt]ests/
+*.Tests/

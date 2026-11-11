@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
-using PRN222_CinemaManagement.Data;
+using PRN222_CinemaManagement.Services.Interfaces;
 
 namespace PRN222_CinemaManagement.Hubs;
 
 /// <summary>Kênh chỉ phát tín hiệu làm mới sơ đồ, không phát dữ liệu cá nhân hay nhận lệnh đặt vé.</summary>
-public class SeatHub(CinemaDbContext db) : Hub
+public class SeatHub(IMovieCatalogService movieCatalogService) : Hub
 {
     public static string GroupName(int showtimeId)
     {
@@ -14,8 +13,7 @@ public class SeatHub(CinemaDbContext db) : Hub
 
     public async Task JoinShowtime(int showtimeId)
     {
-        bool exists = await db.Showtimes.AnyAsync(
-            s => s.ShowtimeId == showtimeId && s.Movie.Status == "Showing", Context.ConnectionAborted);
+        bool exists = await movieCatalogService.IsShowtimeAvailableForUpdatesAsync(showtimeId, Context.ConnectionAborted);
         if (!exists)
         {
             throw new HubException("Không tìm thấy suất chiếu.");
@@ -30,6 +28,7 @@ public class SeatHub(CinemaDbContext db) : Hub
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, oldGroup);
             }
         }
+
         var group = GroupName(showtimeId);
         await Groups.AddToGroupAsync(Context.ConnectionId, group);
         Context.Items["ShowtimeGroup"] = group;

@@ -39,6 +39,9 @@ public static class BookingDemoData
 
         // 4. Tạo lưới ghế (ShowtimeSeats) cho tất cả các suất chiếu
         await EnsureShowtimeSeatsAsync(context, now);
+
+        // 5. Bổ sung menu bắp, đồ uống và combo đa dạng
+        await EnsureConcessionItemsAsync(context);
     }
 
     private static async Task EnsureAuditoriumsAndSeatsAsync(CinemaDbContext context)
@@ -532,6 +535,54 @@ public static class BookingDemoData
         if (batch.Count > 0)
         {
             context.ShowtimeSeats.AddRange(batch);
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static async Task EnsureConcessionItemsAsync(CinemaDbContext context)
+    {
+        var items = new (string Name, string Description, decimal Price, int Stock)[]
+        {
+            ("Popcorn Caramel", "Bắp rang bơ vị caramel giòn thơm (cỡ L)", 65_000m, 100),
+            ("Bắp Phô Mai (L)", "Bắp rang giòn phủ phô mai đậm đà cỡ lớn", 65_000m, 80),
+            ("Bắp Ngọt Truyền Thống (M)", "Bắp rang bơ vị ngọt vừa vặn cho 1 người", 50_000m, 90),
+            ("Bắp Mix 2 Vị (Caramel & Phô Mai)", "Hộp lớn kết hợp hai vị caramel và phô mai", 75_000m, 60),
+            ("Coca-Cola 32oz", "Nước ngọt có ga mát lạnh cỡ lớn", 30_000m, 120),
+            ("Sprite / 7Up 32oz", "Nước ngọt vị chanh tươi mát lạnh cỡ lớn", 30_000m, 120),
+            ("Trà Đào Cam Sả (L)", "Trà đào thanh mát kèm thạch đào giòn", 45_000m, 70),
+            ("Nước Suối Dasani 500ml", "Nước khoáng tinh khiết đóng chai ướp lạnh", 20_000m, 150),
+            ("Combo Solo", "1 bắp rang cỡ vừa + 1 nước ngọt 32oz tiết kiệm", 85_000m, 50),
+            ("Combo Couple (1 Bắp L + 2 Nước)", "1 bắp rang cỡ lớn tự chọn vị + 2 ly nước ngọt 32oz", 115_000m, 50),
+            ("Combo Gia Đình (2 Bắp L + 4 Nước)", "2 bắp rang cỡ lớn + 4 nước ngọt cho nhóm bạn và gia đình", 215_000m, 40),
+            ("Khoai Tây Lắc Phô Mai", "Khoai tây chiên giòn lắc bột phô mai nóng hổi", 40_000m, 60)
+        };
+
+        var existingNames = (await context.ConcessionItems
+            .Select(c => c.Name)
+            .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var newItems = new List<ConcessionItem>();
+        foreach (var (name, desc, price, stock) in items)
+        {
+            if (!existingNames.Contains(name))
+            {
+                newItems.Add(new ConcessionItem
+                {
+                    Name = name,
+                    Description = desc,
+                    Price = price,
+                    StockQuantity = stock,
+                    LowStockThreshold = 10,
+                    Status = "Active"
+                });
+                existingNames.Add(name);
+            }
+        }
+
+        if (newItems.Count > 0)
+        {
+            context.ConcessionItems.AddRange(newItems);
             await context.SaveChangesAsync();
         }
     }

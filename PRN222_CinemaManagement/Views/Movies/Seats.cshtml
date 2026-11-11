@@ -6,14 +6,21 @@
 }
 <div id="seat-booking" data-showtime-id="@Model.ShowtimeId" data-can-book="@canBook.ToString().ToLowerInvariant()"
      data-snapshot-url="@Url.Action("SeatSnapshot", "Movies", new { id = Model.ShowtimeId })"
-     data-hold-url="@Url.Action("SetSeats", "Booking")" data-checkout-url="@Url.Action("Checkout", "Booking")"
+     data-hold-url="@Url.Action("SetSeats", "Booking")" data-checkout-url="@Url.Action("Concessions", "Booking")"
      data-login-url="@Url.Action("Login", "Account", new { returnUrl = Url.Action("Seats", "Movies", new { id = Model.ShowtimeId }) })"
      data-hub-url="@Url.Content("~/hubs/seats")">
     @Html.AntiForgeryToken()
     @* JsonSerializer mặc định escape HTML; không chèn trực tiếp tiêu đề/phản hồi server vào JavaScript. *@
     <script id="initial-seat-map" type="application/json">@Html.Raw(JsonSerializer.Serialize(Model, new JsonSerializerOptions(JsonSerializerDefaults.Web)))</script>
     <a asp-action="Index">← Chọn phim khác</a>
-    <h1 class="h3 mt-3">@Model.MovieTitle</h1>
+    <nav aria-label="Tiến trình đặt vé" class="booking-steps mt-3 mb-3">
+        <span class="booking-step active">1. Chọn ghế</span>
+        <span class="booking-step-sep">→</span>
+        <span class="booking-step">2. Chọn bắp &amp; đồ uống</span>
+        <span class="booking-step-sep">→</span>
+        <span class="booking-step">3. Xác nhận &amp; thanh toán</span>
+    </nav>
+    <h1 class="h3 mt-2">@Model.MovieTitle</h1>
     <p>@Model.Auditorium · @BookingDisplay.VietnamTime(Model.StartAt).ToString("HH:mm · dd/MM/yyyy") (giờ Việt Nam)</p>
     @if (!canBook)
     {
@@ -40,8 +47,8 @@
                 <p id="selected-seats">Chưa chọn ghế</p>
                 <p class="mb-1">Thời gian giữ còn lại</p><strong id="seat-countdown" class="h3">--:--</strong>
                 <p class="small text-muted mt-2">Giữ ghế tối đa 5 phút kể từ lần chọn đầu. Chọn thêm hoặc tải lại trang không gia hạn.</p>
-                <div class="d-flex justify-content-between border-top pt-3 mb-3"><span>Tổng tiền</span><strong id="booking-total">0 đ</strong></div>
-                <a id="checkout-link" class="btn btn-primary w-100 disabled" aria-disabled="true">Tiếp tục đặt vé</a>
+                <div class="d-flex justify-content-between border-top pt-3 mb-3"><span>Tiền ghế</span><strong id="booking-total">0 đ</strong></div>
+                <a id="checkout-link" class="btn btn-primary w-100 disabled" aria-disabled="true">Tiếp tục chọn bắp &amp; nước</a>
                 <button id="clear-seats" type="button" class="btn btn-link w-100 mt-2" disabled>Bỏ chọn tất cả</button>
                 <p class="small text-muted mb-0">Tối đa 20 ghế mỗi đơn. Ghế đôi là một đơn vị đặt vé cho hai người.</p>
             </div></div>

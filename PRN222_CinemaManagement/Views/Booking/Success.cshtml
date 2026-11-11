@@ -1,20 +1,184 @@
 @model BookingDetailsViewModel
-@{ ViewData["Title"] = "Vé điện tử"; }
-<div class="alert alert-success"><h1 class="h4">Đặt vé thành công!</h1><p class="mb-0">Vé của bạn đã được xác nhận. Xuất trình mã QR tại rạp để kiểm tra vé.</p></div>
-<partial name="_BookingSummary" model="Model" />
-<h2 class="h4 mb-3">Vé điện tử của bạn</h2>
-<div class="row g-3">
-    @foreach (var ticket in Model.Tickets)
-    {
-        <div class="col-sm-6 col-lg-4">
-            <article class="card ticket-card h-100"><div class="card-body text-center">
-                <h3 class="h5">Ghế @ticket.SeatLabel</h3>
-                <img src="@Url.Action("TicketQr", new { id = ticket.TicketId })" class="ticket-qr" alt="Mã QR vé ghế @ticket.SeatLabel" width="220" height="220" />
-                <p class="small text-break mb-2"><code>@ticket.TicketCode</code></p>
-                <p>@ticket.Price.ToString("N0") đ · @(ticket.Status == "CheckedIn" ? "Đã sử dụng" : ticket.Status == "Cancelled" ? "Đã hủy" : "Hợp lệ")</p>
-                <a asp-action="TicketQr" asp-route-id="@ticket.TicketId" download="@(ticket.TicketCode + ".png")" class="btn btn-outline-primary btn-sm">Tải mã QR</a>
-            </div></article>
+@{
+    ViewData["Title"] = "Vé điện tử";
+    var showtimeVn = BookingDisplay.VietnamTime(Model.StartAt);
+    var totalConcessionQty = Model.Concessions.Sum(c => c.Quantity);
+}
+
+<section class="eticket-hero mb-4" aria-labelledby="eticket-hero-title">
+    <div class="row g-4 align-items-center">
+        <div class="col-lg-8">
+            <div class="eticket-status-pill mb-3">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <circle cx="10" cy="10" r="9" fill="#10b981" />
+                    <path d="M6.2 10.3l2.4 2.4 5.2-5.4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span>Thanh toán &amp; đặt vé đã xác nhận</span>
+            </div>
+
+            <h1 id="eticket-hero-title" class="h2 fw-bold text-white mb-2">@Model.MovieTitle</h1>
+            <p class="eticket-hero-sub mb-3">
+                @(totalConcessionQty > 0
+                    ? "Xuất trình mã QR vé phim tại cổng phòng chiếu và mã QR bắp nước tại quầy Concession."
+                    : "Xuất trình mã QR bên dưới tại quầy soát vé trước giờ chiếu khoảng 15 phút để vào phòng.")
+            </p>
+
+            <div class="d-flex flex-wrap gap-2">
+                <span class="eticket-meta-chip">@Model.Auditorium</span>
+                <span class="eticket-meta-chip">@showtimeVn.ToString("HH:mm · dd/MM/yyyy") (giờ VN)</span>
+                <span class="eticket-meta-chip">Mã đơn: <strong>@Model.BookingCode</strong></span>
+            </div>
         </div>
-    }
+
+        <div class="col-lg-4">
+            <div class="eticket-paid-box">
+                <span class="eticket-paid-label">Tổng đã thanh toán</span>
+                <strong class="eticket-paid-amount">@Model.TotalAmount.ToString("N0") đ</strong>
+                <div class="d-flex flex-wrap gap-2 mt-3 no-print">
+                    <button type="button" class="btn btn-light btn-sm fw-semibold flex-grow-1" onclick="window.print()">
+                        In / Lưu vé
+                    </button>
+                    <a asp-action="MyBookings" class="btn btn-outline-light btn-sm flex-grow-1">
+                        Vé của tôi
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4 align-items-start">
+    <div class="col-lg-7">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h5 mb-0">Mã QR vào phòng chiếu (@Model.Tickets.Count vé)</h2>
+            <span class="small text-muted">Mỗi ghế tương ứng 1 mã riêng biệt</span>
+        </div>
+
+        <div class="row row-cols-1 @(Model.Tickets.Count > 1 ? "row-cols-md-2" : "") g-3">
+            @foreach (var ticket in Model.Tickets)
+            {
+                var statusClass = ticket.Status == "CheckedIn"
+                    ? "text-bg-secondary"
+                    : ticket.Status == "Cancelled"
+                        ? "text-bg-danger"
+                        : "eticket-badge-valid";
+                var statusLabel = ticket.Status == "CheckedIn"
+                    ? "Đã sử dụng"
+                    : ticket.Status == "Cancelled"
+                        ? "Đã hủy"
+                        : "Hợp lệ";
+
+                <div class="col">
+                    <article class="eticket-card h-100">
+                        <div class="eticket-card-head">
+                            <div>
+                                <span class="eticket-seat-kicker">Ghế ngồi</span>
+                                <h3 class="h4 fw-bold mb-0">@ticket.SeatLabel</h3>
+                            </div>
+                            <span class="badge rounded-pill @statusClass">@statusLabel</span>
+                        </div>
+
+                        <div class="eticket-perforation" aria-hidden="true"></div>
+
+                        <div class="eticket-card-body text-center">
+                            <div class="eticket-qr-frame mx-auto mb-3">
+                                <img src="@Url.Action("TicketQr", new { id = ticket.TicketId })"
+                                     class="ticket-qr"
+                                     alt="Mã QR vé ghế @ticket.SeatLabel"
+                                     width="200"
+                                     height="200" />
+                            </div>
+                            <p class="small text-muted mb-1">Mã vé điện tử</p>
+                            <p class="small text-break mb-3"><code class="eticket-code">@ticket.TicketCode</code></p>
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                                <span class="fw-semibold text-dark">@ticket.Price.ToString("N0") đ</span>
+                                <a asp-action="TicketQr"
+                                   asp-route-id="@ticket.TicketId"
+                                   download="@(ticket.TicketCode + ".png")"
+                                   class="btn btn-outline-primary btn-sm no-print">
+                                    Tải mã QR
+                                </a>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            }
+        </div>
+
+        @if (totalConcessionQty > 0 && !string.IsNullOrEmpty(Model.ConcessionTicketCode))
+        {
+            <div class="mt-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Mã QR nhận bắp &amp; đồ uống (@totalConcessionQty phần)</h2>
+                    <span class="small text-muted">Xuất trình tại quầy Concession</span>
+                </div>
+
+                <article class="eticket-card eticket-card--concession">
+                    <div class="eticket-card-head eticket-card-head--concession">
+                        <div>
+                            <span class="eticket-seat-kicker eticket-seat-kicker--concession">Vé bắp &amp; đồ uống</span>
+                            <h3 class="h5 fw-bold mb-0">@Model.Concessions.Count loại · @totalConcessionQty phần</h3>
+                        </div>
+                        <span class="badge rounded-pill eticket-badge-valid">Hợp lệ</span>
+                    </div>
+
+                    <div class="eticket-perforation" aria-hidden="true"></div>
+
+                    <div class="eticket-card-body">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-7">
+                                <ul class="list-unstyled mb-0 eticket-concession-items">
+                                    @foreach (var item in Model.Concessions)
+                                    {
+                                        <li class="d-flex justify-content-between gap-2 py-2 border-bottom">
+                                            <span>
+                                                <strong class="text-dark">@item.Name</strong>
+                                                <span class="text-muted">× @item.Quantity</span>
+                                            </span>
+                                            <span class="text-nowrap fw-semibold text-dark">@item.Subtotal.ToString("N0") đ</span>
+                                        </li>
+                                    }
+                                </ul>
+                                <div class="d-flex justify-content-between align-items-center pt-2 mt-1">
+                                    <span class="small text-muted">Tổng bắp nước</span>
+                                    <strong class="text-primary">@Model.ConcessionSubtotal.ToString("N0") đ</strong>
+                                </div>
+                            </div>
+
+                            <div class="col-md-5 text-center">
+                                <div class="eticket-qr-frame mx-auto mb-2">
+                                    <img src="@Url.Action("ConcessionQr", new { id = Model.BookingId })"
+                                         class="ticket-qr"
+                                         alt="Mã QR nhận bắp và đồ uống đơn @Model.BookingCode"
+                                         width="180"
+                                         height="180" />
+                                </div>
+                                <p class="small text-muted mb-1">Mã phiếu bắp nước</p>
+                                <p class="small text-break mb-2"><code class="eticket-code">@Model.ConcessionTicketCode</code></p>
+                                <a asp-action="ConcessionQr"
+                                   asp-route-id="@Model.BookingId"
+                                   download="@(Model.ConcessionTicketCode + ".png")"
+                                   class="btn btn-outline-primary btn-sm no-print">
+                                    Tải mã QR
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        }
+    </div>
+
+    <aside class="col-lg-5">
+        <partial name="_BookingSummary" model="Model" />
+
+        <div class="d-flex flex-wrap gap-2 mt-3 no-print">
+            <a asp-controller="Movies" asp-action="Index" class="btn btn-primary flex-grow-1">
+                Đặt vé phim khác
+            </a>
+            <a asp-action="MyBookings" class="btn btn-outline-secondary flex-grow-1">
+                Lịch sử đặt vé
+            </a>
+        </div>
+    </aside>
 </div>
-<div class="d-flex gap-3 mt-4"><a asp-action="MyBookings">Đơn đặt vé của tôi</a><a asp-controller="Movies" asp-action="Index">Tiếp tục xem phim</a></div>

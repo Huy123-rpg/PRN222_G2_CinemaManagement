@@ -14,7 +14,16 @@
     </div>
     <div class="col-md-8">
         <h1>@Model.Movie.Title</h1>
-        <p><span class="badge bg-secondary">@Model.Movie.AgeRating</span> <span>@Model.Movie.DurationMinutes phút</span></p>
+        <p class="mb-2"><span class="badge bg-secondary">@Model.Movie.AgeRating</span> <span>@Model.Movie.DurationMinutes phút</span></p>
+        @if (Model.Movie.Genres.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-1 mb-3">
+                @foreach (var genre in Model.Movie.Genres)
+                {
+                    <span class="badge rounded-pill text-bg-light border fw-normal">@genre</span>
+                }
+            </div>
+        }
         <p class="movie-synopsis">@Model.Movie.Description</p>
         <h2 class="h4 mt-4">Chọn suất chiếu</h2>
         <p class="text-muted">Giờ Việt Nam (UTC+7). Giá từng ghế được hiển thị ở bước tiếp theo.</p>

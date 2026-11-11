@@ -1,34 +1,102 @@
 @model BookingDetailsViewModel
 @{
-    ViewData["Title"] = "Xác nhận đặt vé";
+    ViewData["Title"] = "Xác nhận & thanh toán";
     var canPay = Model.Status == "Pending" && Model.ExpiresAt > Model.ServerNow && Model.Seats.Count > 0;
 }
-<h1 class="h3 mb-4">Xác nhận đặt vé</h1>
+
+<nav aria-label="Tiến trình đặt vé" class="booking-steps mb-4">
+    @if (canPay)
+    {
+        <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="booking-step completed text-decoration-none">
+            1. Chọn ghế
+        </a>
+        <span class="booking-step-sep">→</span>
+        <a asp-action="Concessions" asp-route-id="@Model.BookingId" class="booking-step completed text-decoration-none">
+            2. Chọn bắp &amp; đồ uống
+        </a>
+    }
+    else
+    {
+        <span class="booking-step completed">1. Chọn ghế</span>
+        <span class="booking-step-sep">→</span>
+        <span class="booking-step completed">2. Chọn bắp &amp; đồ uống</span>
+    }
+    <span class="booking-step-sep">→</span>
+    <span class="booking-step active">3. Xác nhận &amp; thanh toán</span>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Xác nhận đơn &amp; thanh toán</h1>
+        <p class="text-muted mb-0">Kiểm tra lại thông tin vé, bắp nước và hoàn tất thanh toán qua VNPay trong một bước.</p>
+    </div>
+</div>
+
 <div class="row g-4">
-    <div class="col-lg-8"><partial name="_BookingSummary" model="Model" /></div>
-    <div class="col-lg-4">
+    <div class="col-lg-7">
+        <partial name="_BookingSummary" model="Model" />
+    </div>
+    <div class="col-lg-5">
         @if (canPay)
         {
-            <div class="card"><div class="card-body">
-                <h2 class="h5">Hoàn tất trong thời gian giữ ghế</h2>
-                <p class="display-6" data-booking-countdown data-expires-at="@Model.ExpiresAt.ToString("O")" data-server-now="@Model.ServerNow.ToString("O")">--:--</p>
-                <p class="small text-muted">Thanh toán thất bại có thể thử lại trước hạn này. Tải lại trang không gia hạn giữ ghế.</p>
-                <form asp-action="Checkout" asp-route-id="@Model.BookingId" method="post">
-                    <input type="hidden" name="confirm" value="true" />
-                    <button class="btn btn-primary w-100" data-requires-time>Xác nhận và thanh toán</button>
-                </form>
-                <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="btn btn-outline-secondary w-100 mt-2">Thay đổi ghế</a>
-                <form asp-action="Cancel" asp-route-id="@Model.BookingId" method="post" class="mt-2">
-                    <button class="btn btn-link text-danger w-100">Hủy đơn, nhả ghế</button>
-                </form>
-            </div></div>
+            <div class="card shadow-sm sticky-top" style="top: 1rem;">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
+                        <div>
+                            <p class="small text-muted mb-1">Thời gian giữ ghế còn lại</p>
+                            <p class="display-6 text-danger mb-0" data-booking-countdown data-expires-at="@Model.ExpiresAt.ToString("O")" data-server-now="@Model.ServerNow.ToString("O")">--:--</p>
+                        </div>
+                        <div class="text-end">
+                            <span class="small text-muted d-block">Tổng thanh toán</span>
+                            <strong class="h4 text-primary mb-0">@Model.TotalAmount.ToString("N0") đ</strong>
+                        </div>
+                    </div>
+
+                    <div class="vnpay-box p-3 rounded-3 border mb-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="vnpay-badge">
+                                <span class="vnpay-vn">VN</span><span class="vnpay-pay">PAY</span>
+                            </span>
+                            <strong class="small text-dark">Cổng thanh toán VNPay Sandbox</strong>
+                        </div>
+                        <p class="small text-muted mb-0">
+                            Hệ thống sẽ chuyển sang cổng VNPay để thanh toán an toàn. Nếu giao dịch thất bại, bạn vẫn có thể thử lại trước khi hết hạn giữ ghế.
+                        </p>
+                    </div>
+
+                    <form asp-action="Pay" asp-route-id="@Model.BookingId" method="post">
+                        <button type="submit" class="btn btn-primary btn-lg w-100" data-requires-time>
+                            Thanh toán qua VNPay · @Model.TotalAmount.ToString("N0") đ
+                        </button>
+                    </form>
+
+                    <div class="row g-2 mt-2">
+                        <div class="col-6">
+                            <a asp-action="Concessions" asp-route-id="@Model.BookingId" class="btn btn-outline-primary btn-sm w-100">
+                                Chọn / sửa bắp nước
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="btn btn-outline-secondary btn-sm w-100">
+                                Thay đổi ghế
+                            </a>
+                        </div>
+                    </div>
+
+                    <form asp-action="Cancel" asp-route-id="@Model.BookingId" method="post" class="mt-3 pt-2 border-top">
+                        <button type="submit" class="btn btn-link text-danger btn-sm w-100 text-decoration-none">
+                            Hủy đơn, nhả ghế đang giữ
+                        </button>
+                    </form>
+                </div>
+            </div>
         }
         else
         {
             <div class="alert alert-warning">Đơn đã hết hạn hoặc đã hủy. Hãy chọn ghế lại để bắt đầu đơn mới.</div>
             <a asp-controller="Movies" asp-action="Seats" asp-route-id="@Model.ShowtimeId" class="btn btn-primary">Chọn ghế lại</a>
         }
-        <a asp-action="MyBookings" class="d-block mt-3">Xem các đơn của tôi</a>
+        <a asp-action="MyBookings" class="d-block mt-3 text-decoration-none">← Xem các đơn đặt vé của tôi</a>
     </div>
 </div>
 @section Scripts { <script src="~/js/booking.js" asp-append-version="true"></script> }

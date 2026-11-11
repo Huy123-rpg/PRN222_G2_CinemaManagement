@@ -1,4 +1,4 @@
-﻿/* Đặt vé online: luôn lấy trạng thái ghế, giá tiền và hạn giữ từ server. */
+/* Đặt vé online: luôn lấy trạng thái ghế, giá tiền và hạn giữ từ server. */
 (function () {
     "use strict";
 
@@ -38,6 +38,150 @@
         }
         tick();
         window.setInterval(tick, 1000);
+    }
+
+    const movieFilterForm = document.getElementById("movie-filter-form");
+    if (movieFilterForm) {
+        const searchInput = document.getElementById("movie-search");
+        const genreSelect = document.getElementById("movie-genre");
+        let previousSearch = searchInput ? searchInput.defaultValue : "";
+
+        for (const control of movieFilterForm.querySelectorAll("[data-auto-submit='true']")) {
+            control.addEventListener("change", () => movieFilterForm.submit());
+        }
+
+        for (const chip of movieFilterForm.querySelectorAll("[data-genre-chip]")) {
+            chip.addEventListener("click", (event) => {
+                if (!genreSelect) return;
+                event.preventDefault();
+                genreSelect.value = chip.dataset.genreChip || "";
+                movieFilterForm.submit();
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener("search", () => {
+                if (searchInput.value === "" && previousSearch !== "") {
+                    previousSearch = "";
+                    movieFilterForm.submit();
+                }
+            });
+        }
+    }
+
+    const concessionForm = document.getElementById("concession-form");
+    if (concessionForm) {
+        const seatTotalEl = document.querySelector("[data-seat-subtotal]");
+        const seatSubtotal = seatTotalEl ? Number(seatTotalEl.dataset.seatSubtotal || 0) : 0;
+        const concessionSubtotalEl = document.getElementById("concession-subtotal");
+        const grandTotalEl = document.getElementById("concession-grand-total");
+        const selectedListEl = document.getElementById("concession-selected-list");
+
+        function updateConcessionSummary(normalizeInputs = true) {
+            let foodSubtotal = 0;
+            const summaryItems = [];
+
+            for (const input of concessionForm.querySelectorAll("[data-concession-qty]")) {
+                const max = Number(input.max || 20);
+                const min = Number(input.min || 0);
+                let qty = parseInt(input.value, 10);
+                if (Number.isNaN(qty) || qty < min) qty = min;
+                if (qty > max) qty = max;
+                if (normalizeInputs) {
+                    input.value = String(qty);
+                }
+
+                const unitPrice = Number(input.dataset.unitPrice || 0);
+                const lineTotal = qty * unitPrice;
+                foodSubtotal += lineTotal;
+
+                const card = input.closest(".concession-card");
+                if (card) {
+                    card.classList.toggle("border-primary", qty > 0);
+                    const lineEl = card.querySelector("[data-item-subtotal]");
+                    if (lineEl) {
+                        lineEl.textContent = "Thành tiền: " + money(lineTotal);
+                        lineEl.classList.toggle("d-none", qty <= 0);
+                    }
+                }
+
+                if (qty > 0) {
+                    summaryItems.push({
+                        name: input.dataset.itemName || "Sản phẩm",
+                        qty,
+                        lineTotal
+                    });
+                }
+            }
+
+            if (concessionSubtotalEl) concessionSubtotalEl.textContent = money(foodSubtotal);
+            if (grandTotalEl) grandTotalEl.textContent = money(seatSubtotal + foodSubtotal);
+
+            if (selectedListEl) {
+                selectedListEl.replaceChildren();
+                if (summaryItems.length === 0) {
+                    const emptyLi = document.createElement("li");
+                    emptyLi.textContent = "Chưa chọn món nào";
+                    selectedListEl.append(emptyLi);
+                } else {
+                    for (const entry of summaryItems) {
+                        const li = document.createElement("li");
+                        li.className = "d-flex justify-content-between gap-2";
+                        const labelSpan = document.createElement("span");
+                        labelSpan.textContent = entry.name + " × " + entry.qty;
+                        const priceSpan = document.createElement("span");
+                        priceSpan.textContent = money(entry.lineTotal);
+                        li.append(labelSpan, priceSpan);
+                        selectedListEl.append(li);
+                    }
+                }
+            }
+        }
+
+        concessionForm.addEventListener("click", (event) => {
+            const tab = event.target.closest("[data-concession-tab]");
+            if (tab) {
+                const selectedCategory = tab.dataset.concessionTab || "";
+                for (const btn of concessionForm.querySelectorAll("[data-concession-tab]")) {
+                    const isActive = (btn.dataset.concessionTab || "") === selectedCategory;
+                    btn.classList.toggle("btn-primary", isActive);
+                    btn.classList.toggle("btn-outline-secondary", !isActive);
+                }
+                for (const col of concessionForm.querySelectorAll(".concession-card-col")) {
+                    const visible = !selectedCategory || col.dataset.category === selectedCategory;
+                    col.classList.toggle("d-none", !visible);
+                }
+                return;
+            }
+
+            const stepBtn = event.target.closest("[data-step]");
+            if (stepBtn && !stepBtn.disabled) {
+                const stepper = stepBtn.closest(".concession-stepper");
+                const input = stepper ? stepper.querySelector("[data-concession-qty]") : null;
+                if (!input || input.readOnly) return;
+                const delta = Number(stepBtn.dataset.step || 0);
+                input.value = String((parseInt(input.value, 10) || 0) + delta);
+                updateConcessionSummary();
+            }
+        });
+
+        concessionForm.addEventListener("change", (event) => {
+            if (event.target.matches("[data-concession-qty]")) {
+                updateConcessionSummary(true);
+            }
+        });
+
+        concessionForm.addEventListener("input", (event) => {
+            if (event.target.matches("[data-concession-qty]")) {
+                updateConcessionSummary(false);
+            }
+        });
+
+        concessionForm.addEventListener("submit", () => {
+            updateConcessionSummary(true);
+        });
+
+        updateConcessionSummary(true);
     }
 
     const root = document.getElementById("seat-booking");

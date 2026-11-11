@@ -1,4 +1,34 @@
 /* Phạm vi riêng cho màn hình đặt vé; không thay đổi giao diện quản trị tài khoản. */
+:root {
+    --cinema-navy: #192d46;
+    --cinema-navy-deep: #101f33;
+    --cinema-slate-900: #0f172a;
+    --cinema-slate-600: #475569;
+    --cinema-slate-200: #e2e8f0;
+    --cinema-surface: #ffffff;
+    --cinema-surface-soft: #f8fafc;
+    --cinema-confirm: #059669;
+    --cinema-confirm-soft: #ecfdf5;
+}
+.movie-filter-card { background: var(--cinema-surface-soft); border: 1px solid var(--cinema-slate-200); }
+.movie-card { transition: transform .15s ease, box-shadow .15s ease; }
+.movie-card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(15, 23, 42, .08) !important; }
+.filter-chip-remove:hover { background-color: #e9ecef !important; }
+.booking-steps { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .9rem; }
+.booking-step { padding: .35rem .75rem; border-radius: 999px; background: #f1f5f9; color: #64748b; font-weight: 500; }
+.booking-step.completed { background: #e0f2fe; color: #0369a1; }
+.booking-step.active { background: #0d6efd; color: #fff; font-weight: 600; }
+.booking-step-sep { color: #94a3b8; }
+.booking-table-wrap { overflow-x: auto; overflow-y: hidden; }
+.vnpay-box { background: #f8fafc; }
+.vnpay-badge { display: inline-flex; align-items: center; padding: .2rem .55rem; border-radius: .35rem; background: #fff; border: 1px solid #cbd5e1; font-weight: 800; font-size: .85rem; letter-spacing: .04em; }
+.vnpay-vn { color: #d71920; }
+.vnpay-pay { color: #005baa; }
+.concession-card { transition: border-color .15s ease, box-shadow .15s ease; }
+.concession-stepper { width: 112px; }
+.concession-stepper input[type="number"]::-webkit-inner-spin-button,
+.concession-stepper input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.concession-stepper input[type="number"] { -moz-appearance: textfield; }
 .movie-poster { height: 320px; object-fit: cover; }
 .movie-placeholder { display: grid; place-items: center; background: #192d46; color: #fff; font-weight: 800; letter-spacing: .3em; }
 .movie-description { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -21,4 +51,32 @@
 .seat-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .seat-key { width: 16px; height: 16px; display: inline-block; border: 1px solid #577c68; border-radius: 3px; background: #f5fff8; }
 .ticket-qr { max-width: 100%; height: auto; image-rendering: pixelated; }
+.eticket-hero { background: linear-gradient(135deg, var(--cinema-navy-deep) 0%, var(--cinema-navy) 100%); color: #fff; border-radius: 16px; padding: 1.5rem 1.75rem; border: 1px solid rgba(255, 255, 255, .08); box-shadow: 0 10px 28px rgba(16, 31, 51, .14); }
+.eticket-status-pill { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border-radius: 999px; background: rgba(16, 185, 129, .18); border: 1px solid rgba(52, 211, 153, .38); color: #d1fae5; font-size: .85rem; font-weight: 600; }
+.eticket-hero-sub { color: #cbd5e1; max-width: 58ch; font-size: .95rem; }
+.eticket-meta-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 8px; background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .14); color: #f8fafc; font-size: .85rem; }
+.eticket-paid-box { background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .14); border-radius: 12px; padding: 1.1rem 1.25rem; }
+.eticket-paid-label { display: block; color: #cbd5e1; font-size: .82rem; margin-bottom: .25rem; }
+.eticket-paid-amount { display: block; font-size: 1.65rem; font-weight: 700; color: #ffffff; letter-spacing: -.01em; }
+.eticket-card { background: var(--cinema-surface); border: 1px solid var(--cinema-slate-200); border-radius: 14px; overflow: hidden; box-shadow: 0 6px 18px rgba(15, 23, 42, .05); display: flex; flex-direction: column; }
+.eticket-card-head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem .85rem; background: var(--cinema-surface-soft); }
+.eticket-seat-kicker { display: block; font-size: .75rem; color: var(--cinema-slate-600); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.eticket-badge-valid { background: var(--cinema-confirm-soft); color: #065f46; border: 1px solid #a7f3d0; font-weight: 600; }
+.eticket-perforation { position: relative; border-top: 2px dashed var(--cinema-slate-200); margin: 0 14px; height: 1px; }
+.eticket-perforation::before,
+.eticket-perforation::after { content: ""; position: absolute; top: -9px; width: 16px; height: 16px; border-radius: 50%; background: var(--cinema-surface); border: 1px solid var(--cinema-slate-200); }
+.eticket-perforation::before { left: -22px; }
+.eticket-perforation::after { right: -22px; }
+.eticket-card-body { padding: 1.15rem 1.25rem 1.1rem; flex: 1 1 auto; }
+.eticket-qr-frame { display: inline-block; padding: .65rem; background: #fff; border: 1px solid var(--cinema-slate-200); border-radius: 12px; }
+.eticket-code { font-size: .78rem; color: var(--cinema-slate-600); }
+.eticket-card-head--concession { background: #fffbeb; }
+.eticket-seat-kicker--concession { color: #92400e; }
+.eticket-concession-items li:last-child { border-bottom: 0 !important; }
+.payment-failed-hero { background: linear-gradient(135deg, #2a121b 0%, var(--cinema-navy) 100%); border-color: rgba(248, 113, 113, .22); }
+.eticket-status-pill--failed { background: rgba(239, 68, 68, .18); border-color: rgba(248, 113, 113, .42); color: #fee2e2; }
+@media print {
+    header, footer, .no-print { display: none !important; }
+    .eticket-hero, .eticket-card, .card { break-inside: avoid; page-break-inside: avoid; box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 @media (max-width: 575px) { .seat-button { width: 40px; height: 43px; } .seat-row { gap: 5px; } }

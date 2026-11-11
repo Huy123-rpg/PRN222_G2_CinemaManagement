@@ -1,5 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using PRN222_CinemaManagement.Services;
+using Microsoft.AspNetCore.Mvc;
+using PRN222_CinemaManagement.Constants;
+using PRN222_CinemaManagement.Exceptions;
+using PRN222_CinemaManagement.Models.ViewModels;
+using PRN222_CinemaManagement.Services.Interfaces;
 
 namespace PRN222_CinemaManagement.Controllers;
 
@@ -7,12 +10,12 @@ namespace PRN222_CinemaManagement.Controllers;
 // Các action GET chỉ đọc dữ liệu, không tạo đơn hoặc giữ ghế.
 public class MoviesController(IOnlineBookingService bookingService) : Controller
 {
-    // GET: /Movies - Danh sách phim đang mở bán.
+    // GET: /Movies - Danh sách phim đang mở bán (hỗ trợ tìm kiếm, lọc và sắp xếp).
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken ct)
+    public async Task<IActionResult> Index([FromQuery] MovieFilterViewModel filter, CancellationToken ct)
     {
-        var movies = await bookingService.GetMoviesAsync(ct);
-        return View(movies);
+        var catalog = await bookingService.GetMovieCatalogAsync(filter, ct);
+        return View(catalog);
     }
 
     // GET: /Movies/Details/5 - Chi tiết phim và các suất chiếu sắp tới.
@@ -34,7 +37,7 @@ public class MoviesController(IOnlineBookingService bookingService) : Controller
     {
         try
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
+            var userId = HttpContext.Session.GetInt32(BookingConstants.UserIdSessionKey);
             var map = await bookingService.GetSeatMapAsync(id, userId, ct);
             if (map == null)
             {
@@ -55,7 +58,7 @@ public class MoviesController(IOnlineBookingService bookingService) : Controller
     {
         try
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
+            var userId = HttpContext.Session.GetInt32(BookingConstants.UserIdSessionKey);
             var map = await bookingService.GetSeatMapAsync(id, userId, ct);
             if (map == null)
             {

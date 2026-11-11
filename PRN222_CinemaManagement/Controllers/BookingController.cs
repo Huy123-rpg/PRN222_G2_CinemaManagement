@@ -1,23 +1,23 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PRN222_CinemaManagement.Constants;
+using PRN222_CinemaManagement.Exceptions;
 using PRN222_CinemaManagement.Filters;
 using PRN222_CinemaManagement.Models.ViewModels;
-using PRN222_CinemaManagement.Services;
-using System.Net;
-using System.Web;
+using PRN222_CinemaManagement.Services.Interfaces;
 
 namespace PRN222_CinemaManagement.Controllers;
 
 // Chỉ khách hàng được dùng các chức năng đặt vé.
 // Service sẽ kiểm tra thêm tài khoản còn hoạt động và đơn thuộc đúng khách hàng.
-[SessionAuthorize(Roles = "Customer")]
+[SessionAuthorize(Roles = BookingConstants.CustomerRole)]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class BookingController(IOnlineBookingService bookingService , VnPayService vnPayService , IConfiguration configuration) : Controller
+public class BookingController(IOnlineBookingService bookingService, IVnPayService vnPayService) : Controller
 {
     private int GetCurrentUserId()
     {
         // Lấy người mua từ Session, không lấy UserId/CustomerId do trình duyệt gửi.
-        return HttpContext.Session.GetInt32("UserId") ?? 0;
+        return HttpContext.Session.GetInt32(BookingConstants.UserIdSessionKey) ?? 0;
     }
 
     // POST: /Booking/SetSeats - Giữ hoặc bỏ chọn các ghế trong sơ đồ.
@@ -41,7 +41,69 @@ public class BookingController(IOnlineBookingService bookingService , VnPayServi
         }
     }
 
-    // GET: /Booking/Checkout/5 - Xem lại ghế và tổng tiền trước thanh toán.
+    // GET: /Booking/Concessions/5 - Chọn bắp rang, đồ uống và combo sau khi giữ ghế.
+    [HttpGet]
+    public async Task<IActionResult> Concessions(int id, CancellationToken ct)
+    {
+        try
+        {
+            var selection = await bookingService.GetConcessionSelectionAsync(GetCurrentUserId(), id, ct);
+            if (selection == null)
+            {
+                return NotFound("Không tìm thấy đơn đặt vé của bạn.");
+            }
+            if (selection.Status == BookingConstants.BookingStatuses.Confirmed)
+            {
+                return RedirectToAction(nameof(Success), new { id });
+            }
+            if (selection.Status != BookingConstants.BookingStatuses.Pending
+                || selection.ExpiresAt <= selection.ServerNow
+                || selection.Seats.Count == 0)
+            {
+                return RedirectToAction(nameof(Checkout), new { id });
+            }
+            return View(selection);
+        }
+        catch (BookingException ex)
+        {
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+    }
+
+    // POST: /Booking/Concessions/5 - Lưu bắp nước, tính tổng tiền với giá vé và tiếp tục xác nhận.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Concessions(int id, SetConcessionsRequest request, bool skipFood = false, CancellationToken ct = default)
+    {
+        request.BookingId = id;
+        if (skipFood)
+        {
+            request.Items = new List<ConcessionOrderItemInput>();
+        }
+
+        if (!ModelState.IsValid)
+        {
+            TempData["ErrorMessage"] = $"Số lượng mỗi món không hợp lệ (tối đa {BookingConstants.MaxQuantityPerConcessionItem} phần).";
+            return RedirectToAction(nameof(Concessions), new { id });
+        }
+
+        try
+        {
+            await bookingService.SetConcessionsAsync(GetCurrentUserId(), request, ct);
+            return RedirectToAction(nameof(Checkout), new { id });
+        }
+        catch (BookingException ex)
+        {
+            if (ex.StatusCode == 403 || ex.StatusCode == 404)
+            {
+                return StatusCode(ex.StatusCode, ex.Message);
+            }
+            TempData["ErrorMessage"] = ex.Message;
+            return RedirectToAction(nameof(Concessions), new { id });
+        }
+    }
+
+    // GET: /Booking/Checkout/5 - Xem lại ghế, bắp nước, tổng tiền và thanh toán trên cùng 1 màn hình.
     [HttpGet]
     public async Task<IActionResult> Checkout(int id, CancellationToken ct)
     {
@@ -52,9 +114,9 @@ public class BookingController(IOnlineBookingService bookingService , VnPayServi
             {
                 return NotFound("Không tìm thấy đơn đặt vé của bạn.");
             }
-            if (booking.Status == "Confirmed")
+            if (booking.Status == BookingConstants.BookingStatuses.Confirmed)
             {
-                return RedirectToAction("Success", new { id });
+                return RedirectToAction(nameof(Success), new { id });
             }
             return View(booking);
         }
@@ -64,192 +126,138 @@ public class BookingController(IOnlineBookingService bookingService , VnPayServi
         }
     }
 
-    // POST: /Booking/Checkout/5 - Xác nhận đơn, không gia hạn giữ ghế.
+    // POST: /Booking/Checkout/5 - Tương thích form cũ: xác nhận chuyển thẳng sang thanh toán VNPay.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Checkout(int id, bool confirm, CancellationToken ct)
+    public Task<IActionResult> Checkout(int id, bool confirm, CancellationToken ct)
     {
-        try
-        {
-            var booking = await bookingService.GetBookingAsync(GetCurrentUserId(), id, ct);
-            if (booking == null)
-            {
-                return NotFound("Không tìm thấy đơn đặt vé của bạn.");
-            }
-            if (!CanPay(booking))
-            {
-                TempData["ErrorMessage"] = "Đơn không còn trong thời gian giữ ghế. Vui lòng kiểm tra lại.";
-                return RedirectToAction("Checkout", new { id });
-            }
-            return RedirectToAction("Payment", new { id });
-        }
-        catch (BookingException ex)
-        {
-            return StatusCode(ex.StatusCode, ex.Message);
-        }
+        return confirm
+            ? Pay(id, ct)
+            : Task.FromResult<IActionResult>(RedirectToAction(nameof(Checkout), new { id }));
     }
 
-    // GET: /Booking/Payment/5 - Mở màn hình thanh toán giả lập.
+    // GET: /Booking/Payment/5 - Gộp chung về màn hình Xác nhận & thanh toán duy nhất.
     [HttpGet]
-    public async Task<IActionResult> Payment(int id, CancellationToken ct)
+    public IActionResult Payment(int id)
     {
-        try
-        {
-            var booking = await bookingService.GetBookingAsync(GetCurrentUserId(), id, ct);
-            if (booking == null)
-            {
-                return NotFound("Không tìm thấy đơn đặt vé của bạn.");
-            }
-            if (booking.Status == "Confirmed")
-            {
-                return RedirectToAction("Success", new { id });
-            }
-            if (!CanPay(booking))
-            {
-                return RedirectToAction("Checkout", new { id });
-            }
-            return View(booking);
-        }
-        catch (BookingException ex)
-        {
-            return StatusCode(ex.StatusCode, ex.Message);
-        }
+        return RedirectToAction(nameof(Checkout), new { id });
     }
 
-    //// POST: /Booking/Pay - Xử lý thành công, thất bại hoặc hủy thanh toán giả lập.
-    //[HttpPost]
-    //[ValidateAntiForgeryToken]
-    //public async Task<IActionResult> Pay(SimulatedPaymentRequest request, CancellationToken ct)
-    //{
-    //    if (!ModelState.IsValid)
-    //    {
-    //        TempData["ErrorMessage"] = "Kết quả hoặc phương thức thanh toán không hợp lệ.";
-    //        return RedirectToAction("Checkout", new { id = request.BookingId });
-    //    }
-
-    //    try
-    //    {
-    //        var status = await bookingService.PayAsync(GetCurrentUserId(), request, ct);
-    //        if (status == "Confirmed")
-    //        {
-    //            return RedirectToAction("Success", new { id = request.BookingId });
-    //        }
-    //        if (status == "Cancelled")
-    //        {
-    //            TempData["ErrorMessage"] = "Đã hủy thanh toán và giải phóng ghế.";
-    //        }
-    //        else
-    //        {
-    //            TempData["ErrorMessage"] = "Thanh toán thất bại. Bạn có thể thử lại trong thời gian giữ ghế còn lại.";
-    //        }
-    //    }
-    //    catch (BookingException ex)
-    //    {
-    //        if (ex.StatusCode == 403 || ex.StatusCode == 404)
-    //        {
-    //            return StatusCode(ex.StatusCode, ex.Message);
-    //        }
-    //        TempData["ErrorMessage"] = ex.Message;
-    //    }
-    //    return RedirectToAction("Checkout", new { id = request.BookingId });
-    //}
-
-
-
-    // POST: /Booking/Pay/5 - Chuyển hướng sang VNPay
+    // POST: /Booking/Pay/5 - Chuyển hướng sang VNPay.
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Pay(int id, CancellationToken ct)
     {
         try
         {
-            // Lấy thông tin booking để kiểm tra
             var booking = await bookingService.GetBookingAsync(GetCurrentUserId(), id, ct);
-            if (booking == null || booking.Status != "Pending" || booking.ExpiresAt <= booking.ServerNow)
+            if (booking == null || !CanPay(booking))
             {
                 TempData["ErrorMessage"] = "Đơn không còn trong thời gian giữ ghế. Vui lòng kiểm tra lại.";
-                return RedirectToAction("Checkout", new { id });
+                return RedirectToAction(nameof(Checkout), new { id });
             }
 
-            // Lấy IP (xử lý IPv6 trên localhost)
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             if (ipAddress == "::1") ipAddress = "127.0.0.1";
 
-            // Tạo URL thanh toán VNPay
             // vnp_OrderInfo KHÔNG dùng khoảng trắng: VNPay sandbox ký/mã hóa chuỗi có dấu cách
             // thường bị lệch và trả "Sai chữ ký" (code 70). Dùng dấu gạch dưới thay thế.
             var paymentUrl = vnPayService.CreatePaymentUrl(
                 booking.BookingId,
                 booking.TotalAmount,
                 $"Thanh_toan_ve_xem_phim_don_hang_{booking.BookingId}",
-                ipAddress
-            );
+                ipAddress);
 
-            // Chuyển hướng trình duyệt sang VNPay
             return Redirect(paymentUrl);
         }
         catch (BookingException ex)
         {
             TempData["ErrorMessage"] = ex.Message;
-            return RedirectToAction("Checkout", new { id });
+            return RedirectToAction(nameof(Checkout), new { id });
         }
     }
 
-    // GET: /Booking/VnPayReturn - Đón kết quả từ VNPay trả về
+    // GET: /Booking/VnPayReturn - Đón kết quả từ VNPay trả về.
     [HttpGet]
     [AllowAnonymous]
     public async Task<IActionResult> VnPayReturn(CancellationToken ct)
     {
-        var vnpayData = Request.Query;
-        var vnp_HashSecret = configuration["VnPay:HashSecret"];
+        var queryDictionary = Request.Query.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToString());
 
-        string vnp_SecureHash = vnpayData["vnp_SecureHash"].ToString();
-
-        var vnp_Params = new SortedDictionary<string, string>();
-        foreach (var key in vnpayData.Keys)
+        var callbackResult = vnPayService.VerifyCallback(queryDictionary);
+        if (!callbackResult.IsValidSignature)
         {
-            if (key.StartsWith("vnp_") && key != "vnp_SecureHash")
-            {
-                vnp_Params.Add(key, vnpayData[key]!);
-            }
+            TempData["PaymentFailureReason"] = callbackResult.ErrorMessage ?? "Chữ ký giao dịch VNPay không hợp lệ.";
+            return RedirectToAction(nameof(PaymentFailed));
         }
-
-        // BẮT BUỘC: Phải dùng WebUtility.UrlEncode để mã hóa lại chuỗi trước khi băm
-        var queryString = string.Join("&", vnp_Params.Select(kvp => $"{WebUtility.UrlEncode(kvp.Key)}={WebUtility.UrlEncode(kvp.Value)}"));
-
-        var checkSum = vnPayService.HmacSha512(vnp_HashSecret!, queryString);
-
-        if (!checkSum.Equals(vnp_SecureHash, StringComparison.InvariantCultureIgnoreCase))
-        {
-            TempData["ErrorMessage"] = "Chữ ký không hợp lệ (Dữ liệu có thể đã bị thay đổi).";
-            return RedirectToAction("Index", "Home");
-        }
-
-        string vnp_ResponseCode = vnpayData["vnp_ResponseCode"].ToString();
-        int bookingId = int.Parse(vnpayData["vnp_TxnRef"].ToString()!);
-
-        bool isSuccess = vnp_ResponseCode == "00";
 
         try
         {
-            var status = await bookingService.ConfirmPaymentAsync(bookingId, isSuccess, ct);
+            var status = await bookingService.ConfirmPaymentAsync(
+                callbackResult.BookingId,
+                callbackResult.IsSuccess,
+                ct);
 
-            if (status == "Confirmed")
+            if (status == BookingConstants.BookingStatuses.Confirmed)
             {
-                TempData["SuccessMessage"] = "Thanh toán thành công!";
-                return RedirectToAction("Success", new { id = bookingId });
+                return RedirectToAction(nameof(Success), new { id = callbackResult.BookingId });
             }
-            else
-            {
-                TempData["ErrorMessage"] = "Thanh toán thất bại hoặc đã bị hủy.";
-                return RedirectToAction("Checkout", new { id = bookingId });
-            }
+
+            TempData["PaymentFailureReason"] = callbackResult.ErrorMessage ?? "Giao dịch thanh toán VNPay không thành công hoặc đã bị hủy.";
+            TempData["PaymentResponseCode"] = callbackResult.ResponseCode;
+            TempData["PaymentTransactionNo"] = callbackResult.TransactionNo;
+            return RedirectToAction(nameof(PaymentFailed), new { id = callbackResult.BookingId });
         }
         catch (BookingException ex)
         {
-            TempData["ErrorMessage"] = ex.Message;
-            return RedirectToAction("Index", "Home");
+            TempData["PaymentFailureReason"] = ex.Message;
+            TempData["PaymentResponseCode"] = callbackResult.ResponseCode;
+            TempData["PaymentTransactionNo"] = callbackResult.TransactionNo;
+            return callbackResult.BookingId > 0
+                ? RedirectToAction(nameof(PaymentFailed), new { id = callbackResult.BookingId })
+                : RedirectToAction(nameof(PaymentFailed));
         }
+    }
+
+    // GET: /Booking/PaymentFailed/5 - Trang thông báo thanh toán thất bại và cho phép thử lại khi còn giữ ghế.
+    [HttpGet]
+    public async Task<IActionResult> PaymentFailed(int? id, CancellationToken ct)
+    {
+        var failureReason = TempData["PaymentFailureReason"] as string
+            ?? "Giao dịch thanh toán qua VNPay không thành công hoặc đã bị hủy.";
+        var responseCode = TempData["PaymentResponseCode"] as string;
+        var transactionNo = TempData["PaymentTransactionNo"] as string;
+
+        BookingDetailsViewModel? booking = null;
+        if (id.HasValue && id.Value > 0)
+        {
+            try
+            {
+                booking = await bookingService.GetBookingAsync(GetCurrentUserId(), id.Value, ct);
+                if (booking == null)
+                {
+                    return NotFound("Không tìm thấy đơn đặt vé của bạn.");
+                }
+                if (booking.Status == BookingConstants.BookingStatuses.Confirmed)
+                {
+                    return RedirectToAction(nameof(Success), new { id = booking.BookingId });
+                }
+            }
+            catch (BookingException ex)
+            {
+                return StatusCode(ex.StatusCode, ex.Message);
+            }
+        }
+
+        return View(new PaymentFailedViewModel
+        {
+            Booking = booking,
+            FailureMessage = failureReason,
+            ResponseCode = responseCode,
+            TransactionNo = transactionNo
+        });
     }
 
     // POST: /Booking/Cancel/5 - Hủy đơn chưa thanh toán và nhả ghế.
@@ -270,7 +278,7 @@ public class BookingController(IOnlineBookingService bookingService , VnPayServi
             }
             TempData["ErrorMessage"] = ex.Message;
         }
-        return RedirectToAction("Checkout", new { id });
+        return RedirectToAction(nameof(Checkout), new { id });
     }
 
     // GET: /Booking/Success/5 - Xem vé sau khi thanh toán thành công.
@@ -284,9 +292,9 @@ public class BookingController(IOnlineBookingService bookingService , VnPayServi
             {
                 return NotFound("Không tìm thấy đơn đặt vé của bạn.");
             }
-            if (booking.Status != "Confirmed")
+            if (booking.Status != BookingConstants.BookingStatuses.Confirmed)
             {
-                return RedirectToAction("Checkout", new { id });
+                return RedirectToAction(nameof(Checkout), new { id });
             }
             return View(booking);
         }
@@ -330,8 +338,29 @@ public class BookingController(IOnlineBookingService bookingService , VnPayServi
         }
     }
 
+    // GET: /Booking/ConcessionQr/5 - Sinh ảnh QR nhận bắp và đồ uống của đơn đã xác nhận.
+    [HttpGet]
+    public async Task<IActionResult> ConcessionQr(int id, CancellationToken ct)
+    {
+        try
+        {
+            var bytes = await bookingService.GetConcessionQrAsync(GetCurrentUserId(), id, ct);
+            if (bytes == null)
+            {
+                return NotFound();
+            }
+            return File(bytes, "image/png");
+        }
+        catch (BookingException ex)
+        {
+            return StatusCode(ex.StatusCode, ex.Message);
+        }
+    }
+
     private static bool CanPay(BookingDetailsViewModel booking)
     {
-        return booking.Status == "Pending" && booking.ExpiresAt > booking.ServerNow && booking.Seats.Count > 0;
+        return booking.Status == BookingConstants.BookingStatuses.Pending
+            && booking.ExpiresAt > booking.ServerNow
+            && booking.Seats.Count > 0;
     }
 }
