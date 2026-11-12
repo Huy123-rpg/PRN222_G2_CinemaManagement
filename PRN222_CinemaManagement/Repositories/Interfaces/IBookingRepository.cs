@@ -13,7 +13,13 @@ public interface IBookingRepository : IGenericRepository<Booking>
     Task<int> MarkExpiredIfPendingAsync(int bookingId, DateTime utcNow, CancellationToken ct = default);
     Task<int> MarkConfirmedIfValidAsync(int bookingId, DateTime utcNow, CancellationToken ct = default);
     Task<Booking?> GetOwnedOnlineBookingDetailsAsync(int customerId, int bookingId, CancellationToken ct = default);
+    Task<Booking?> GetOnlineBookingDetailsByIdAsync(int bookingId, CancellationToken ct = default);
     Task<IReadOnlyList<Booking>> GetOwnedOnlineBookingsDetailsAsync(int customerId, CancellationToken ct = default);
+    Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetPagedOwnedOnlineBookingsDetailsAsync(
+        int customerId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
     Task<Booking?> GetConfirmedOnlineBookingForConcessionQrAsync(int customerId, int bookingId, CancellationToken ct = default);
 }
 

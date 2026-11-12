@@ -367,3 +367,11 @@ SPEC_OnlineBooking_Bach.md
 # Local test folders
 [Tt]ests/
 *.Tests/
+
+# Local docs & diagrams
+[Dd]ocs/
+*.md
+!wwwroot/lib/**/LICENSE.md
+
+# Local development secrets & email credentials
+appsettings.Development.json

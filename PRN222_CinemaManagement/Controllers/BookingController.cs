@@ -304,13 +304,16 @@ public class BookingController(IOnlineBookingService bookingService, IVnPayServi
         }
     }
 
-    // GET: /Booking/MyBookings - Chỉ lấy đơn của khách hàng đang đăng nhập.
+    // GET: /Booking/MyBookings - Chỉ lấy đơn của khách hàng đang đăng nhập (có phân trang).
     [HttpGet]
-    public async Task<IActionResult> MyBookings(CancellationToken ct)
+    public async Task<IActionResult> MyBookings(
+        int page = 1,
+        int pageSize = BookingConstants.DefaultBookingPageSize,
+        CancellationToken ct = default)
     {
         try
         {
-            var bookings = await bookingService.GetMyBookingsAsync(GetCurrentUserId(), ct);
+            var bookings = await bookingService.GetMyBookingsPagedAsync(GetCurrentUserId(), page, pageSize, ct);
             return View(bookings);
         }
         catch (BookingException ex)

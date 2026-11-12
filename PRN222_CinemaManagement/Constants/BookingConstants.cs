@@ -6,11 +6,14 @@ public static class BookingConstants
     public const int MaxSeatsPerBooking = 20;
     public const int MaxQuantityPerConcessionItem = 20;
     public const int ExpirationBatchSize = 200;
+    public const int DefaultMoviePageSize = 6;
+    public const int DefaultBookingPageSize = 10;
+    public const int MaxPageSize = 48;
     public const int VietnamUtcOffsetHours = 7;
     public const string CustomerRole = "Customer";
     public const string ActiveUserStatus = "Active";
     public const string UserIdSessionKey = "UserId";
-    public const string ConcessionTicketPrefix = "CN-";
+    public const string ConcessionTicketPrefix = "CN-"; // Tiền tố cho mã vé của các sản phẩm ăn uống (concession) để phân biệt với vé xem phim
 
     public static class ConcessionStatuses
     {
@@ -53,24 +56,25 @@ public static class BookingConstants
 
     public static class PhysicalSeatStatuses
     {
-        public const string Active = "Active";
+        public const string Active = "Active";// Ghế vật lý đang hoạt động, có thể bán vé
     }
 
     public static class ShowtimeStatuses
     {
-        public const string Scheduled = "Scheduled";
+        public const string Scheduled = "Scheduled";// Suất chiếu đã được lên lịch nhưng chưa bắt đầu
+
     }
 
     public static class MovieStatuses
     {
-        public const string Upcoming = "Upcoming";
-        public const string Showing = "Showing";
-        public const string Ended = "Ended";
+        public const string Upcoming = "Upcoming";// Phim sắp chiếu
+        public const string Showing = "Showing";// Phim đang chiếu
+        public const string Ended = "Ended";// Phim đã kết thúc
     }
 
     public static class AuditoriumStatuses
     {
-        public const string Active = "Active";
+        public const string Active = "Active";// Phòng chiếu đang hoạt động, có thể sử dụng để chiếu phim
     }
 
     public static class TicketStatuses

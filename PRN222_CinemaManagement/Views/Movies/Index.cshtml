@@ -5,6 +5,7 @@
     var showDateQuery = Model.Filter.ShowDate?.ToString("yyyy-MM-dd");
     var onlyWithShowtimesQuery = Model.Filter.OnlyWithShowtimes ? "true" : null;
     var sortByQuery = Model.Filter.SortBy == BookingConstants.MovieSortOptions.TitleAsc ? null : Model.Filter.SortBy;
+    var pageSizeQuery = Model.Filter.PageSize == BookingConstants.DefaultMoviePageSize ? (int?)null : Model.Filter.PageSize;
 
     string AgeBadgeClass(string rating) => rating switch
     {
@@ -153,7 +154,14 @@
 {
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <p class="text-muted small mb-0">
-            Hiển thị <strong>@Model.Movies.Count</strong> / <strong>@Model.TotalShowingCount</strong> phim đang chiếu
+            @if (Model.Pagination.TotalItems > 0)
+            {
+                <span>Hiển thị <strong>@Model.Pagination.StartItem–@Model.Pagination.EndItem</strong> / <strong>@Model.Pagination.TotalItems</strong> phim phù hợp (Tổng @Model.TotalShowingCount phim đang chiếu)</span>
+            }
+            else
+            {
+                <span>Không có phim phù hợp trong tổng số <strong>@Model.TotalShowingCount</strong> phim đang chiếu</span>
+            }
         </p>
 
         @if (Model.Filter.HasActiveFilters)
@@ -276,6 +284,102 @@ else
             </div>
         }
     </div>
+
+    @if (Model.Pagination.TotalPages > 1)
+    {
+        var pageNumbers = Model.Pagination.GetPageNumbers();
+        <nav aria-label="Phân trang danh sách phim" class="mt-4">
+            <ul class="pagination justify-content-center flex-wrap mb-0">
+                <li class="page-item @(Model.Pagination.HasPreviousPage ? "" : "disabled")">
+                    <a class="page-link"
+                       asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithShowtimes="@onlyWithShowtimesQuery"
+                       asp-route-PageSize="@pageSizeQuery"
+                       asp-route-Page="@(Model.Pagination.Page - 1)"
+                       aria-label="Trang trước">
+                        « Trước
+                    </a>
+                </li>
+
+                @if (pageNumbers[0] > 1)
+                {
+                    <li class="page-item">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@Model.Filter.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithShowtimes="@onlyWithShowtimesQuery"
+                           asp-route-PageSize="@pageSizeQuery"
+                           asp-route-Page="1">1</a>
+                    </li>
+                    @if (pageNumbers[0] > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                }
+
+                @foreach (var p in pageNumbers)
+                {
+                    <li class="page-item @(p == Model.Pagination.Page ? "active" : "")" aria-current="@(p == Model.Pagination.Page ? "page" : null)">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@Model.Filter.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithShowtimes="@onlyWithShowtimesQuery"
+                           asp-route-PageSize="@pageSizeQuery"
+                           asp-route-Page="@p">@p</a>
+                    </li>
+                }
+
+                @if (pageNumbers[^1] < Model.Pagination.TotalPages)
+                {
+                    @if (pageNumbers[^1] < Model.Pagination.TotalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                    <li class="page-item">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@Model.Filter.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithShowtimes="@onlyWithShowtimesQuery"
+                           asp-route-PageSize="@pageSizeQuery"
+                           asp-route-Page="@Model.Pagination.TotalPages">@Model.Pagination.TotalPages</a>
+                    </li>
+                }
+
+                <li class="page-item @(Model.Pagination.HasNextPage ? "" : "disabled")">
+                    <a class="page-link"
+                       asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithShowtimes="@onlyWithShowtimesQuery"
+                       asp-route-PageSize="@pageSizeQuery"
+                       asp-route-Page="@(Model.Pagination.Page + 1)"
+                       aria-label="Trang sau">
+                        Sau »
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    }
 }
 
 @section Scripts {

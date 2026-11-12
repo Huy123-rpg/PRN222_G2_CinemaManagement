@@ -1,3 +1,4 @@
+using PRN222_CinemaManagement.Constants;
 using PRN222_CinemaManagement.Models.ViewModels;
 
 namespace PRN222_CinemaManagement.Services.Interfaces;
@@ -14,6 +15,11 @@ public interface IOnlineBookingService
     Task<ConcessionSelectionResultViewModel> SetConcessionsAsync(int userId, SetConcessionsRequest request, CancellationToken ct = default);
     Task<BookingDetailsViewModel?> GetBookingAsync(int userId, int bookingId, CancellationToken ct = default);
     Task<IReadOnlyList<BookingDetailsViewModel>> GetMyBookingsAsync(int userId, CancellationToken ct = default);
+    Task<MyBookingsViewModel> GetMyBookingsPagedAsync(
+        int userId,
+        int page = 1,
+        int pageSize = BookingConstants.DefaultBookingPageSize,
+        CancellationToken ct = default);
     Task<string> PayAsync(int userId, SimulatedPaymentRequest request, CancellationToken ct = default);
     Task CancelAsync(int userId, int bookingId, CancellationToken ct = default);
     Task<int> ReleaseExpiredAsync(CancellationToken ct = default);

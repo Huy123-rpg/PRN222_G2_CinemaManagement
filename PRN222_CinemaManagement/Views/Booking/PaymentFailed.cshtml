@@ -45,7 +45,7 @@
                     <strong class="eticket-paid-amount">@Model.Booking.TotalAmount.ToString("N0") đ</strong>
                     <span class="small d-block mt-2" style="color: #fecaca;">
                         @(Model.CanRetry
-                            ? "Đơn chưa trừ tiền — ghế vẫn đang được giữ tạm thời."
+                            ? "Đơn chưa thanh toán — ghế vẫn đang được giữ tạm thời."
                             : "Đơn không còn trong thời gian giữ ghế.")
                     </span>
                 </div>
@@ -81,7 +81,7 @@
                         </div>
 
                         <p class="small text-muted mb-3">
-                            Bạn chưa bị xuất vé cho giao dịch lỗi vừa rồi. Hãy thử thanh toán lại qua VNPay trước khi đồng hồ giữ ghế kết thúc.
+                            Bạn chưa được xuất vé cho giao dịch lỗi vừa rồi. Hãy thử thanh toán lại qua VNPay trước khi đồng hồ giữ ghế kết thúc.
                         </p>
 
                         <form asp-action="Pay" asp-route-id="@Model.Booking.BookingId" method="post">

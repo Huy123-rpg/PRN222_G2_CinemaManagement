@@ -25,6 +25,8 @@ public class MovieFilterViewModel
     public DateOnly? ShowDate { get; set; }
     public string SortBy { get; set; } = BookingConstants.MovieSortOptions.TitleAsc;
     public bool OnlyWithShowtimes { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = BookingConstants.DefaultMoviePageSize;
 
     public bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(Search)
@@ -33,6 +35,27 @@ public class MovieFilterViewModel
         || ShowDate.HasValue
         || OnlyWithShowtimes
         || (!string.IsNullOrWhiteSpace(SortBy) && SortBy != BookingConstants.MovieSortOptions.TitleAsc);
+}
+
+public class PaginationViewModel
+{
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = BookingConstants.DefaultMoviePageSize;
+    public int TotalItems { get; set; }
+
+    public int TotalPages => TotalItems <= 0 ? 1 : (int)Math.Ceiling((double)TotalItems / Math.Max(1, PageSize));
+    public bool HasPreviousPage => Page > 1;
+    public bool HasNextPage => Page < TotalPages;
+    public int StartItem => TotalItems == 0 ? 0 : ((Page - 1) * PageSize) + 1;
+    public int EndItem => Math.Min(Page * PageSize, TotalItems);
+
+    public IReadOnlyList<int> GetPageNumbers(int radius = 2)
+    {
+        var total = TotalPages;
+        var start = Math.Max(1, Page - radius);
+        var end = Math.Min(total, Page + radius);
+        return Enumerable.Range(start, end - start + 1).ToList();
+    }
 }
 
 public class GenreOptionViewModel
@@ -51,15 +74,22 @@ public class ShowDateOptionViewModel
 public class MovieCatalogViewModel
 {
     public MovieFilterViewModel Filter { get; set; } = new();
+    public PaginationViewModel Pagination { get; set; } = new();
     public IReadOnlyList<MovieCardViewModel> Movies { get; set; } = Array.Empty<MovieCardViewModel>();
     public IReadOnlyList<GenreOptionViewModel> Genres { get; set; } = Array.Empty<GenreOptionViewModel>();
     public IReadOnlyList<string> AgeRatings { get; set; } = Array.Empty<string>();
     public IReadOnlyList<ShowDateOptionViewModel> ShowDates { get; set; } = Array.Empty<ShowDateOptionViewModel>();
     public int TotalShowingCount { get; set; }
-
+    // filter theo thể loại mặc định của account 
     public string? SelectedGenreName => Filter.GenreId.HasValue
         ? Genres.FirstOrDefault(g => g.GenreId == Filter.GenreId.Value)?.GenreName
         : null;
+}
+
+public class MyBookingsViewModel
+{
+    public IReadOnlyList<BookingDetailsViewModel> Bookings { get; set; } = Array.Empty<BookingDetailsViewModel>();
+    public PaginationViewModel Pagination { get; set; } = new();
 }
 
 // Thông tin một suất chiếu để khách hàng chọn giờ xem.
@@ -164,6 +194,7 @@ public class ConcessionOptionViewModel
     public int SelectedQuantity { get; set; }
 }
 
+
 public class ConcessionSelectionViewModel
 {
     public int BookingId { get; set; }
@@ -230,7 +261,7 @@ public class SetSeatsRequest
     public int? BookingId { get; set; }
 
     [Required, MaxLength(20)]
-    public int[] ShowtimeSeatIds { get; set; } = Array.Empty<int>();
+    public int[] ShowtimeSeatIds { get; set; } = Array.Empty<int>(); 
 }
 
 public class SimulatedPaymentRequest

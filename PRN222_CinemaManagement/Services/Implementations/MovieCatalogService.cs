@@ -50,13 +50,31 @@ public class MovieCatalogService(
         var options = await movieRepository.GetShowingFilterOptionsAsync(now, ct);
         var items = await movieRepository.SearchShowingMoviesAsync(criteria, now, ct);
 
+        var totalFiltered = items.Count;
+        var pageSize = normalizedFilter.PageSize;
+        var totalPages = totalFiltered <= 0 ? 1 : (int)Math.Ceiling((double)totalFiltered / pageSize);
+        var currentPage = Math.Clamp(normalizedFilter.Page, 1, totalPages);
+        normalizedFilter.Page = currentPage;
+
+        var pagedMovies = items
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .Select(MapMovieCard)
+            .ToList();
+
         var todayVn = DateOnly.FromDateTime(BookingDisplay.VietnamTime(now));
 
         return new MovieCatalogViewModel
         {
             Filter = normalizedFilter,
+            Pagination = new PaginationViewModel
+            {
+                Page = currentPage,
+                PageSize = pageSize,
+                TotalItems = totalFiltered
+            },
             TotalShowingCount = options.TotalShowingCount,
-            Movies = items.Select(MapMovieCard).ToList(),
+            Movies = pagedMovies,
             Genres = options.Genres.Select(g => new GenreOptionViewModel
             {
                 GenreId = g.GenreId,
@@ -170,6 +188,10 @@ public class MovieCatalogService(
         var sortBy = AllowedSortOptions.Contains(filter.SortBy)
             ? filter.SortBy
             : BookingConstants.MovieSortOptions.TitleAsc;
+        var page = filter.Page > 0 ? filter.Page : 1;
+        var pageSize = filter.PageSize > 0
+            ? Math.Clamp(filter.PageSize, 1, BookingConstants.MaxPageSize)
+            : BookingConstants.DefaultMoviePageSize;
 
         return new MovieFilterViewModel
         {
@@ -178,7 +200,9 @@ public class MovieCatalogService(
             AgeRating = ageRating,
             ShowDate = filter.ShowDate,
             SortBy = sortBy,
-            OnlyWithShowtimes = filter.OnlyWithShowtimes
+            OnlyWithShowtimes = filter.OnlyWithShowtimes,
+            Page = page,
+            PageSize = pageSize
         };
     }
 

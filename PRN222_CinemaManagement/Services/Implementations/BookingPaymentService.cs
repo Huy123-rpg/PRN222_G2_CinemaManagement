@@ -15,6 +15,8 @@ public class BookingPaymentService(
     IBookingConcessionRepository bookingConcessionRepository,
     ITicketRepository ticketRepository,
     IPaymentRepository paymentRepository,
+    IBookingTicketService ticketService,
+    IBookingEmailService emailService,
     IBookingSupportService support,
     IUnitOfWork unitOfWork,
     ILogger<BookingPaymentService> logger) : IBookingPaymentService
@@ -153,8 +155,7 @@ public class BookingPaymentService(
         await support.NotifySeatsChangedAsync(booking.ShowtimeId);
         if (resultStatus == BookingConstants.BookingStatuses.Confirmed)
         {
-            // Email chỉ giả lập qua log theo spec; khách xem QR tại trang Vé của tôi.
-            logger.LogInformation("Email giả lập: đơn {BookingCode} đã thanh toán và có vé điện tử.", booking.BookingCode);
+            await SendConfirmationEmailSafelyAsync(booking.BookingId, booking.BookingCode, ct);
         }
 
         return resultStatus;
@@ -282,9 +283,27 @@ public class BookingPaymentService(
         if (resultStatus == BookingConstants.BookingStatuses.Confirmed && booking != null)
         {
             await support.NotifySeatsChangedAsync(booking.ShowtimeId);
+            await SendConfirmationEmailSafelyAsync(booking.BookingId, booking.BookingCode, ct);
         }
 
         return resultStatus;
+    }
+
+    private async Task SendConfirmationEmailSafelyAsync(int bookingId, string bookingCode, CancellationToken ct)
+    {
+        try
+        {
+            var details = await ticketService.GetBookingDetailsByIdAsync(bookingId, ct);
+            if (details != null)
+            {
+                await emailService.SendBookingConfirmationAsync(details, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Đơn hàng và vé đã commit vào DB; lỗi gửi mail không được làm hỏng kết quả thanh toán.
+            logger.LogWarning(ex, "Không gửi được email xác nhận cho đơn {BookingCode}.", bookingCode);
+        }
     }
 
     private async Task DeductConcessionsStockAsync(IEnumerable<BookingConcession> concessions, CancellationToken ct)

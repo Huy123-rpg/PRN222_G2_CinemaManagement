@@ -1,3 +1,4 @@
+using PRN222_CinemaManagement.Constants;
 using PRN222_CinemaManagement.Models.ViewModels;
 using PRN222_CinemaManagement.Services.Interfaces;
 
@@ -49,6 +50,13 @@ public class OnlineBookingService(
 
     public Task<IReadOnlyList<BookingDetailsViewModel>> GetMyBookingsAsync(int userId, CancellationToken ct = default)
         => tickets.GetMyBookingsAsync(userId, ct);
+
+    public Task<MyBookingsViewModel> GetMyBookingsPagedAsync(
+        int userId,
+        int page = 1,
+        int pageSize = BookingConstants.DefaultBookingPageSize,
+        CancellationToken ct = default)
+        => tickets.GetMyBookingsPagedAsync(userId, page, pageSize, ct);
 
     public Task<byte[]?> GetTicketQrAsync(int userId, int ticketId, CancellationToken ct = default)
         => tickets.GetTicketQrAsync(userId, ticketId, ct);

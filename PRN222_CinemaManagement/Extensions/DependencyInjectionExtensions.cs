@@ -5,7 +5,9 @@ using PRN222_CinemaManagement.Services.Implementations;
 using PRN222_CinemaManagement.Services.Interfaces;
 
 namespace PRN222_CinemaManagement.Extensions;
-
+//class này dùng để đăng ký các Repository và Service của module đặt
+//  vé online vào DI container, giúp tách biệt các phần của ứng dụng và
+//  dễ dàng quản lý phụ thuộc.
 public static class DependencyInjectionExtensions
 {
     public static IServiceCollection AddRepositories(this IServiceCollection services)
@@ -28,6 +30,7 @@ public static class DependencyInjectionExtensions
     public static IServiceCollection AddOnlineBookingServices(this IServiceCollection services)
     {
         services.AddScoped<IQrCodeService, QrCodeService>();
+        services.AddScoped<IBookingEmailService, BookingEmailService>();
         services.AddScoped<IBookingNotificationService, BookingNotificationService>();
         services.AddScoped<IBookingSupportService, BookingSupportService>();
         services.AddScoped<IMovieCatalogService, MovieCatalogService>();
@@ -42,10 +45,10 @@ public static class DependencyInjectionExtensions
 
     public static IServiceCollection AddOnlineBookingModule(this IServiceCollection services)
     {
-        services.AddRepositories();
-        services.AddOnlineBookingServices();
-        services.AddScoped<IVnPayService, VnPayService>();
-        services.AddHostedService<SeatHoldExpirationService>();
+        services.AddRepositories(); // Đăng ký các Repository
+        services.AddOnlineBookingServices();// Đăng ký các Service
+        services.AddScoped<IVnPayService, VnPayService>();// Đăng ký Service xử lý thanh toán VnPay
+        services.AddHostedService<SeatHoldExpirationService>();// Đăng ký Worker nền xử lý hết hạn giữ ghế
 
         return services;
     }

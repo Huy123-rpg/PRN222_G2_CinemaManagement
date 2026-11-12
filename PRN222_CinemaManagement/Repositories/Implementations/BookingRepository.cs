@@ -108,12 +108,51 @@ public class BookingRepository(CinemaDbContext context)
             .FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
     }
 
+    public Task<Booking?> GetOnlineBookingDetailsByIdAsync(int bookingId, CancellationToken ct = default)
+    {
+        return ApplyDetailsIncludes(DbSet
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(b => b.BookingId == bookingId && b.BookingChannel == BookingConstants.Channels.Online))
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Booking>> GetOwnedOnlineBookingsDetailsAsync(int customerId, CancellationToken ct = default)
     {
         return await BuildDetailsQuery(customerId)
             .OrderByDescending(b => b.Showtime.StartAt)
             .ThenByDescending(b => b.BookingId)
             .ToListAsync(ct);
+    }
+
+    public async Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetPagedOwnedOnlineBookingsDetailsAsync(
+        int customerId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var baseQuery = DbSet
+            .AsNoTracking()
+            .Where(b => b.CustomerId == customerId && b.BookingChannel == BookingConstants.Channels.Online);
+
+        var totalCount = await baseQuery.CountAsync(ct);
+        if (totalCount == 0)
+        {
+            return (Array.Empty<Booking>(), 0);
+        }
+
+        var normalizedSize = Math.Clamp(pageSize, 1, BookingConstants.MaxPageSize);
+        var totalPages = (int)Math.Ceiling((double)totalCount / normalizedSize);
+        var currentPage = Math.Clamp(page, 1, totalPages);
+
+        var items = await BuildDetailsQuery(customerId)
+            .OrderByDescending(b => b.Showtime.StartAt)
+            .ThenByDescending(b => b.BookingId)
+            .Skip((currentPage - 1) * normalizedSize)
+            .Take(normalizedSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
     }
 
     public Task<Booking?> GetConfirmedOnlineBookingForConcessionQrAsync(int customerId, int bookingId, CancellationToken ct = default)
@@ -129,10 +168,15 @@ public class BookingRepository(CinemaDbContext context)
 
     private IQueryable<Booking> BuildDetailsQuery(int customerId)
     {
-        return DbSet
+        return ApplyDetailsIncludes(DbSet
             .AsNoTracking()
             .AsSplitQuery()
-            .Where(b => b.CustomerId == customerId && b.BookingChannel == BookingConstants.Channels.Online)
+            .Where(b => b.CustomerId == customerId && b.BookingChannel == BookingConstants.Channels.Online));
+    }
+
+    private static IQueryable<Booking> ApplyDetailsIncludes(IQueryable<Booking> query)
+    {
+        return query
             .Include(b => b.Customer).ThenInclude(c => c!.User)
             .Include(b => b.Showtime).ThenInclude(s => s.Movie)
             .Include(b => b.Showtime).ThenInclude(s => s.Auditorium)

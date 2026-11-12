@@ -20,11 +20,46 @@ public class BookingTicketService(
         return booking == null ? null : CreateBookingViewModel(booking);
     }
 
+    public async Task<BookingDetailsViewModel?> GetBookingDetailsByIdAsync(int bookingId, CancellationToken ct = default)
+    {
+        var booking = await bookingRepository.GetOnlineBookingDetailsByIdAsync(bookingId, ct);
+        return booking == null ? null : CreateBookingViewModel(booking);
+    }
+
     public async Task<IReadOnlyList<BookingDetailsViewModel>> GetMyBookingsAsync(int userId, CancellationToken ct = default)
     {
         var customerId = await support.GetActiveCustomerIdAsync(userId, ct);
         var bookings = await bookingRepository.GetOwnedOnlineBookingsDetailsAsync(customerId, ct);
         return bookings.Select(CreateBookingViewModel).ToList();
+    }
+
+    public async Task<MyBookingsViewModel> GetMyBookingsPagedAsync(
+        int userId,
+        int page = 1,
+        int pageSize = BookingConstants.DefaultBookingPageSize,
+        CancellationToken ct = default)
+    {
+        var customerId = await support.GetActiveCustomerIdAsync(userId, ct);
+        var normalizedSize = Math.Clamp(pageSize, 1, BookingConstants.MaxPageSize);
+        var (bookings, totalCount) = await bookingRepository.GetPagedOwnedOnlineBookingsDetailsAsync(
+            customerId,
+            page,
+            normalizedSize,
+            ct);
+
+        var totalPages = totalCount <= 0 ? 1 : (int)Math.Ceiling((double)totalCount / normalizedSize);
+        var currentPage = Math.Clamp(page, 1, totalPages);
+
+        return new MyBookingsViewModel
+        {
+            Bookings = bookings.Select(CreateBookingViewModel).ToList(),
+            Pagination = new PaginationViewModel
+            {
+                Page = currentPage,
+                PageSize = normalizedSize,
+                TotalItems = totalCount
+            }
+        };
     }
 
     public async Task<byte[]?> GetTicketQrAsync(int userId, int ticketId, CancellationToken ct = default)
