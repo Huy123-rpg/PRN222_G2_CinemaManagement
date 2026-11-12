@@ -6,7 +6,7 @@ using PRN222_CinemaManagement.ViewModels;
 
 namespace PRN222_CinemaManagement.Controllers;
 
-public class MovieController(IMovieService movieService) : Controller
+public class MovieController(IMovieService movieService, IMoviePosterStorage posterStorage) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Index(string? tab, string? search, int? genreId)
@@ -23,17 +23,36 @@ public class MovieController(IMovieService movieService) : Controller
     public async Task<IActionResult> Create() => View(await movieService.GetCreateMovieModelAsync());
 
     [HttpPost, ValidateAntiForgeryToken, SessionAuthorize(Roles = "CinemaManager,Admin")]
-    public async Task<IActionResult> Create(CreateMovieViewModel model)
+    public async Task<IActionResult> Create(CreateMovieViewModel model, CancellationToken cancellationToken)
     {
         if (ModelState.IsValid)
         {
-            var result = await movieService.CreateMovieAsync(model);
-            if (result.Succeeded)
+            string? uploadedPosterUrl = null;
+            try
             {
-                TempData["SuccessMessage"] = result.Message;
-                return RedirectToAction("CreateBatch", "Screening", new { movieId = result.Data });
+                uploadedPosterUrl = await posterStorage.SaveAsync(model.PosterFile!, cancellationToken);
+                model.PosterUrl = uploadedPosterUrl;
+
+                var result = await movieService.CreateMovieAsync(model);
+                if (result.Succeeded)
+                {
+                    TempData["SuccessMessage"] = result.Message;
+                    return RedirectToAction("CreateBatch", "Screening", new { movieId = result.Data });
+                }
+
+                await posterStorage.DeleteAsync(uploadedPosterUrl);
+                AddErrors(result);
             }
-            AddErrors(result);
+            catch (InvalidDataException ex)
+            {
+                if (uploadedPosterUrl != null) await posterStorage.DeleteAsync(uploadedPosterUrl);
+                ModelState.AddModelError(nameof(model.PosterFile), ex.Message);
+            }
+            catch
+            {
+                if (uploadedPosterUrl != null) await posterStorage.DeleteAsync(uploadedPosterUrl);
+                throw;
+            }
         }
 
         model.Genres = await movieService.GetGenresAsync();
@@ -48,20 +67,48 @@ public class MovieController(IMovieService movieService) : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken, SessionAuthorize(Roles = "CinemaManager,Admin")]
-    public async Task<IActionResult> Edit(int id, EditMovieViewModel model)
+    public async Task<IActionResult> Edit(int id, EditMovieViewModel model, CancellationToken cancellationToken)
     {
+        var current = await movieService.GetEditMovieModelAsync(id);
+        if (current == null) return NotFound();
+        model.PosterUrl = current.PosterUrl;
+
         if (ModelState.IsValid)
         {
-            var result = await movieService.UpdateMovieAsync(id, model);
-            if (result.Succeeded)
+            string? uploadedPosterUrl = null;
+            try
             {
-                TempData["SuccessMessage"] = result.Message;
-                return RedirectToAction(nameof(Index));
+                if (model.PosterFile is { Length: > 0 })
+                {
+                    uploadedPosterUrl = await posterStorage.SaveAsync(model.PosterFile, cancellationToken);
+                    model.PosterUrl = uploadedPosterUrl;
+                }
+
+                var result = await movieService.UpdateMovieAsync(id, model);
+                if (result.Succeeded)
+                {
+                    if (uploadedPosterUrl != null) await posterStorage.DeleteAsync(current.PosterUrl);
+                    TempData["SuccessMessage"] = result.Message;
+                    return RedirectToAction(nameof(Index));
+                }
+
+                if (uploadedPosterUrl != null) await posterStorage.DeleteAsync(uploadedPosterUrl);
+                if (result.IsNotFound) return NotFound();
+                AddErrors(result);
             }
-            if (result.IsNotFound) return NotFound();
-            AddErrors(result);
+            catch (InvalidDataException ex)
+            {
+                if (uploadedPosterUrl != null) await posterStorage.DeleteAsync(uploadedPosterUrl);
+                ModelState.AddModelError(nameof(model.PosterFile), ex.Message);
+            }
+            catch
+            {
+                if (uploadedPosterUrl != null) await posterStorage.DeleteAsync(uploadedPosterUrl);
+                throw;
+            }
         }
 
+        model.PosterUrl = current.PosterUrl;
         model.Genres = await movieService.GetGenresAsync();
         return View(model);
     }

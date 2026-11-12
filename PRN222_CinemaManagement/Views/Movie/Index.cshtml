@@ -79,7 +79,7 @@
                 }
                 @if (movie.Status == "Showing")
                 {
-                    <button class="buy" type="button" disabled title="Chưa có trang chọn suất chiếu">MUA VÉ</button>
+                    <a class="buy d-block text-center text-decoration-none" asp-controller="Movies" asp-action="Details" asp-route-id="@movie.Id">ĐẶT VÉ</a>
                 }
                 else
                 {

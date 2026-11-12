@@ -126,11 +126,11 @@ public class TicketController(CinemaDbContext context) : Controller
 
         // Bước 2: Giải phóng các ghế đã đặt trong suất chiếu về Available
         var seatIds = booking.Tickets.Select(t => t.ScreeningSeatId).ToList();
-        var showtimeSeats = await context.ScreeningSeats
+        var screeningSeats = await context.ScreeningSeats
             .Where(ss => seatIds.Contains(ss.ScreeningSeatId))
             .ToListAsync();
 
-        foreach (var ss in showtimeSeats)
+        foreach (var ss in screeningSeats)
         {
             ss.Status = "Available";
             ss.HeldByBookingId = null;
@@ -226,11 +226,11 @@ public class TicketController(CinemaDbContext context) : Controller
 
         // Trả ghế về Available
         var seatIds = booking.Tickets.Select(t => t.ScreeningSeatId).ToList();
-        var showtimeSeats = await context.ScreeningSeats
+        var screeningSeats = await context.ScreeningSeats
             .Where(ss => seatIds.Contains(ss.ScreeningSeatId))
             .ToListAsync();
 
-        foreach (var ss in showtimeSeats)
+        foreach (var ss in screeningSeats)
         {
             ss.Status = "Available";
             ss.HeldByBookingId = null;
@@ -239,7 +239,7 @@ public class TicketController(CinemaDbContext context) : Controller
 
         await context.SaveChangesAsync();
 
-        TempData["SuccessMessage"] = $"Đã hủy đơn vé '{booking.BookingCode}' và hoàn trả {showtimeSeats.Count} ghế vào rạp thành công!";
+        TempData["SuccessMessage"] = $"Đã hủy đơn vé '{booking.BookingCode}' và hoàn trả {screeningSeats.Count} ghế vào rạp thành công!";
         return RedirectToAction(nameof(StaffLookup));
     }
 

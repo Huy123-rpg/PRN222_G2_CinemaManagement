@@ -9,7 +9,7 @@
             <p class="cinema-home-eyebrow">TRẢI NGHIỆM ĐIỆN ẢNH</p>
             <h1>Một bộ phim hay.<br />Một buổi tối đáng nhớ.</h1>
             <p>Khám phá phim đang chiếu và sắp khởi chiếu tại rạp.</p>
-            <a asp-controller="Movie" asp-action="Index" asp-route-tab="showing" class="btn cinema-home-cta">Khám phá phim đang chiếu <span aria-hidden="true">→</span></a>
+            <a asp-controller="Movies" asp-action="Index" class="btn cinema-home-cta">Khám phá phim đang chiếu <span aria-hidden="true">→</span></a>
         </div>
         <div class="cinema-home-hero-art" aria-hidden="true"><span>PHIM<br />HAY<br /><b>TRÊN<br />MÀN ẢNH LỚN</b></span></div>
     </section>
@@ -17,7 +17,7 @@
     <section class="cinema-home-section" aria-labelledby="now-showing-title">
         <header class="cinema-home-section-heading">
             <div><p class="cinema-home-eyebrow">ĐANG ĐƯỢC TRÌNH CHIẾU</p><h2 id="now-showing-title">Phim đang chiếu</h2></div>
-            <a asp-controller="Movie" asp-action="Index" asp-route-tab="showing">Tất cả phim <span aria-hidden="true">→</span></a>
+            <a asp-controller="Movies" asp-action="Index">Tất cả phim <span aria-hidden="true">→</span></a>
         </header>
         <div class="cinema-movie-grid">
             @if (Model.NowShowing.Count == 0)
@@ -27,7 +27,7 @@
             @foreach (var movie in Model.NowShowing)
             {
                 <article class="cinema-movie-card">
-                    <a asp-controller="Movie" asp-action="Index" asp-route-tab="showing" class="cinema-movie-poster-link" aria-label="Xem danh sách phim đang chiếu">
+                    <a asp-controller="Movies" asp-action="Details" asp-route-id="@movie.Id" class="cinema-movie-poster-link" aria-label="Xem chi tiết phim @movie.Title">
                         @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
                         {
                             <img class="cinema-movie-poster" src="@movie.PosterUrl" alt="Poster phim @movie.Title" loading="lazy" />
@@ -40,7 +40,7 @@
                     </a>
                     <h3>@movie.Title</h3>
                     <p>@(movie.Genres.Count > 0 ? string.Join(" · ", movie.Genres) : "Phim điện ảnh")<span aria-hidden="true"> · </span>@movie.DurationMinutes phút</p>
-                    <a class="cinema-movie-button" asp-controller="Movie" asp-action="Index" asp-route-tab="showing">Xem lịch phim</a>
+                    <a class="cinema-movie-button" asp-controller="Movies" asp-action="Details" asp-route-id="@movie.Id">Đặt vé</a>
                 </article>
             }
         </div>

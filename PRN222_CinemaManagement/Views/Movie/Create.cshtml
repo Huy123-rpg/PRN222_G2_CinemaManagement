@@ -4,15 +4,42 @@
 }
 
 <h1 class="h3 mb-3">Thêm phim</h1>
-<form asp-action="Create" method="post">
-    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+<form asp-action="Create" method="post" enctype="multipart/form-data" data-movie-media-form>
+    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
     <div class="mb-3"><label asp-for="Title" class="form-label"></label><input asp-for="Title" class="form-control" /><span asp-validation-for="Title" class="text-danger"></span></div>
     <div class="mb-3"><label asp-for="Description" class="form-label"></label><textarea asp-for="Description" class="form-control" rows="4"></textarea><span asp-validation-for="Description" class="text-danger"></span></div>
     <div class="mb-3"><label asp-for="DurationMinutes" class="form-label"></label><input asp-for="DurationMinutes" class="form-control" /><span asp-validation-for="DurationMinutes" class="text-danger"></span></div>
     <div class="mb-3"><label asp-for="AgeRating" class="form-label"></label><select asp-for="AgeRating" class="form-select"><option value="P">P</option><option value="K">K</option><option value="T13">T13</option><option value="T16">T16</option><option value="T18">T18</option></select><span asp-validation-for="AgeRating" class="text-danger"></span></div>
-    <div class="mb-3"><label asp-for="ReleaseDate" class="form-label"></label><input asp-for="ReleaseDate" type="date" class="form-control" /><span asp-validation-for="ReleaseDate" class="text-danger"></span><span class="form-text">Ngày lập lịch chiếu không được trước ngày này.</span></div>
-    <div class="mb-3"><label asp-for="PosterUrl" class="form-label"></label><input asp-for="PosterUrl" type="url" class="form-control" /><span asp-validation-for="PosterUrl" class="text-danger"></span></div>
-    <div class="mb-3"><label asp-for="TrailerUrl" class="form-label"></label><input asp-for="TrailerUrl" type="url" class="form-control" /><span asp-validation-for="TrailerUrl" class="text-danger"></span></div>
+    <div class="mb-3"><label asp-for="ReleaseDate" class="form-label"></label><input asp-for="ReleaseDate" type="date" class="form-control" /><span asp-validation-for="ReleaseDate" class="text-danger"></span><span class="form-text d-block">Ngày lập lịch chiếu không được trước ngày này.</span></div>
+
+    <div class="movie-media-fields mb-4">
+        <section class="movie-media-field" aria-labelledby="poster-upload-title">
+            <label asp-for="PosterFile" id="poster-upload-title" class="form-label fw-semibold"></label>
+            <label class="movie-poster-upload" for="PosterFile">
+                <span class="movie-upload-icon" aria-hidden="true">↑</span>
+                <span><strong>Chọn ảnh poster</strong><br /><span class="text-muted">hoặc kéo ảnh vào đây</span></span>
+                <input asp-for="PosterFile" type="file" accept="image/jpeg,image/png,image/webp" class="movie-file-input" data-poster-input />
+            </label>
+            <p class="form-text">JPG, PNG hoặc WebP · tối đa 5 MB · nên dùng ảnh dọc tỷ lệ 2:3.</p>
+            <span asp-validation-for="PosterFile" class="text-danger d-block"></span>
+            <div class="movie-poster-preview-slot" data-poster-preview-slot>
+                <div class="movie-poster-empty" data-poster-empty>Ảnh xem trước sẽ hiển thị tại đây</div>
+                <img class="movie-poster-preview" data-poster-preview alt="Xem trước poster phim" hidden />
+            </div>
+        </section>
+
+        <section class="movie-media-field" aria-labelledby="trailer-url-title">
+            <label asp-for="TrailerUrl" id="trailer-url-title" class="form-label fw-semibold"></label>
+            <input asp-for="TrailerUrl" type="url" class="form-control" data-trailer-input placeholder="https://www.youtube.com/watch?v=..." autocomplete="url" />
+            <span asp-validation-for="TrailerUrl" class="text-danger d-block"></span>
+            <p class="form-text">Dán link YouTube; trailer không bắt buộc. Video chỉ tải khi bạn bấm phát.</p>
+            <div class="movie-trailer-preview" data-trailer-preview aria-live="polite">
+                <div class="movie-trailer-empty" data-trailer-empty>Preview trailer sẽ hiển thị khi link YouTube hợp lệ.</div>
+            </div>
+        </section>
+    </div>
+
     <div class="mb-3"><label asp-for="GenreIds" class="form-label"></label><select asp-for="GenreIds" asp-items="@(new Microsoft.AspNetCore.Mvc.Rendering.SelectList(Model.Genres, "Id", "Name"))" class="form-select" multiple></select><span class="form-text">Giữ Ctrl để chọn nhiều thể loại.</span><span asp-validation-for="GenreIds" class="text-danger"></span></div>
     <p class="text-muted">Phim mới được tạo với trạng thái Sắp chiếu.</p>
     <button type="submit" class="btn btn-primary">Lưu phim</button>
@@ -21,4 +48,5 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/movie-media-form.js" asp-append-version="true"></script>
 }

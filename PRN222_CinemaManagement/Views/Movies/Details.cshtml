@@ -1,0 +1,48 @@
+@model MovieDetailsViewModel
+@{ ViewData["Title"] = Model.Movie.Title; }
+<a asp-action="Index" class="d-inline-block mb-3">← Danh sách phim</a>
+<div class="row g-4">
+    <div class="col-md-4">
+        @if (!string.IsNullOrWhiteSpace(Model.Movie.PosterUrl))
+        {
+            <img src="@Model.Movie.PosterUrl" class="img-fluid rounded movie-poster w-100" alt="Poster phim @Model.Movie.Title" />
+        }
+        else
+        {
+            <div class="movie-poster movie-placeholder rounded" aria-hidden="true">CINEMA</div>
+        }
+    </div>
+    <div class="col-md-8">
+        <h1>@Model.Movie.Title</h1>
+        <p class="mb-2"><span class="badge bg-secondary">@Model.Movie.AgeRating</span> <span>@Model.Movie.DurationMinutes phút</span></p>
+        @if (Model.Movie.Genres.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-1 mb-3">
+                @foreach (var genre in Model.Movie.Genres)
+                {
+                    <span class="badge rounded-pill text-bg-light border fw-normal">@genre</span>
+                }
+            </div>
+        }
+        <p class="movie-synopsis">@Model.Movie.Description</p>
+        <h2 class="h4 mt-4">Chọn suất chiếu</h2>
+        <p class="text-muted">Giờ Việt Nam (UTC+7). Giá từng ghế được hiển thị ở bước tiếp theo.</p>
+        @if (Model.Screenings.Count == 0)
+        {
+            <div class="alert alert-info">Chưa có suất chiếu sắp tới cho phim này.</div>
+        }
+        @foreach (var day in Model.Screenings.GroupBy(s => BookingDisplay.VietnamTime(s.StartAt).Date))
+        {
+            <h3 class="h6 mt-3">@day.Key.ToString("dd/MM/yyyy")</h3>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var show in day)
+                {
+                    <a asp-action="Seats" asp-route-id="@show.ScreeningId" class="btn btn-outline-primary text-start">
+                        <strong>@BookingDisplay.VietnamTime(show.StartAt).ToString("HH:mm")</strong> · @show.Auditorium<br />
+                        <small>Giá cơ bản: @show.BasePrice.ToString("N0") đ</small>
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</div>
