@@ -121,7 +121,6 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
 
             if (updatedRows != seatIds.Count)
             {
-                await transaction.RollbackAsync();
                 throw new InvalidOperationException(
                     "Giao dịch không thành công: một trong các ghế bạn chọn vừa được mua hoặc giữ bởi người khác. Vui lòng chọn ghế khác.");
             }
@@ -189,7 +188,6 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
 
                 if (dbItems.Count != itemIds.Count)
                 {
-                    await transaction.RollbackAsync();
                     throw new InvalidOperationException("Có sản phẩm bắp nước không tồn tại hoặc đã ngừng kinh doanh.");
                 }
 
@@ -201,7 +199,6 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
                     var dbItem = dbItems.First(ci => ci.ConcessionItemId == order.ItemId);
                     if (dbItem.StockQuantity < order.Quantity)
                     {
-                        await transaction.RollbackAsync();
                         throw new InvalidOperationException(
                             $"Sản phẩm '{dbItem.Name}' không đủ tồn kho (còn {dbItem.StockQuantity}, yêu cầu {order.Quantity}).");
                     }
