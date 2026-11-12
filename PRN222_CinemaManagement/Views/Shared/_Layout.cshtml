@@ -33,6 +33,27 @@
                                 <a class="nav-link text-dark fw-semibold" asp-controller="Employee" asp-action="Index">Quản lý nhân viên</a>
                             </li>
                         }
+                        @if (isLoggedIn && (role == "CinemaManager" || role == "Admin"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark fw-semibold" asp-controller="Auditorium" asp-action="Index">Phòng chiếu</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark fw-semibold" asp-controller="Pricing" asp-action="Index">Bảng giá vé</a>
+                            </li>
+                        }
+                        @if (isLoggedIn && role == "Customer")
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark fw-semibold" asp-controller="Ticket" asp-action="MyBookings">Vé của tôi</a>
+                            </li>
+                        }
+                        @if (isLoggedIn && (role == "Staff" || role == "CinemaManager" || role == "Admin"))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark fw-semibold" asp-controller="Ticket" asp-action="StaffLookup">Tra cứu & Soát vé</a>
+                            </li>
+                        }
                     </ul>
                     <ul class="navbar-nav ms-auto align-items-center">
                         @if (isLoggedIn)

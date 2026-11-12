@@ -1,0 +1,59 @@
+@model PRN222_CinemaManagement.ViewModels.EditSeatTypeViewModel
+
+@{
+    ViewData["Title"] = "Sửa hệ số giá loại ghế";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold">Chỉnh sửa loại ghế: @Model.TypeName</h5>
+            </div>
+            <div class="card-body">
+                <form asp-action="EditSeatType" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="SeatTypeId" />
+
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="TypeName" class="form-label fw-bold"></label>
+                        <input asp-for="TypeName" class="form-control" />
+                        <span asp-validation-for="TypeName" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="PriceMultiplier" class="form-label fw-bold"></label>
+                        <div class="input-group">
+                            <input asp-for="PriceMultiplier" class="form-control" type="number" step="0.1" min="0.1" max="5.0" />
+                            <span class="input-group-text">lần (x)</span>
+                        </div>
+                        <small class="text-muted">Ví dụ: 1.0 (ghế thường), 1.2 (ghế VIP), 2.0 (ghế đôi)</small>
+                        <span asp-validation-for="PriceMultiplier" class="text-danger d-block"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Description" class="form-label fw-bold"></label>
+                        <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+                        <span asp-validation-for="Description" class="text-danger"></span>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input asp-for="IsActive" class="form-check-input" type="checkbox" id="isActiveCheck" />
+                        <label class="form-check-label fw-bold" for="isActiveCheck">Đang áp dụng trong rạp</label>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-3">
+                        <a asp-action="Index" class="btn btn-outline-secondary">Quay lại</a>
+                        <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
