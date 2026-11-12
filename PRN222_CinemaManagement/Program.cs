@@ -15,6 +15,10 @@ builder.Services.AddDbContext<CinemaDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("CinemaDb")));
 
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IScreeningRepository, ScreeningRepository>();
 builder.Services.AddScoped<IScreeningScheduleService, ScreeningScheduleService>();
 builder.Services.AddHttpContextAccessor();

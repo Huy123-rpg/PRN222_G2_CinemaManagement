@@ -1,13 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using PRN222_CinemaManagement.Data;
 using PRN222_CinemaManagement.Filters;
-using PRN222_CinemaManagement.Services;
+using PRN222_CinemaManagement.Services.IService;
 using PRN222_CinemaManagement.ViewModels;
 
 namespace PRN222_CinemaManagement.Controllers;
 
-public class AccountController(CinemaDbContext context, IPasswordService passwordService) : Controller
+public class AccountController(IAccountService accountService) : Controller
 {
     // GET: /Account/Login
     [HttpGet]
@@ -33,31 +31,24 @@ public class AccountController(CinemaDbContext context, IPasswordService passwor
             return View(model);
         }
 
-        var user = await context.Users
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Username == model.Username);
-
-        if (user == null || !passwordService.VerifyPassword(model.Password, user.PasswordHash))
+        var result = await accountService.AuthenticateAsync(model);
+        if (!result.Succeeded)
         {
-            ModelState.AddModelError(string.Empty, "Tên đăng nhập hoặc mật khẩu không chính xác.");
+            AddErrorsToModelState(result);
             return View(model);
         }
 
-        if (user.Status != "Active")
-        {
-            ModelState.AddModelError(string.Empty, "Tài khoản của bạn đã bị khóa hoặc không hoạt động. Vui lòng liên hệ Admin.");
-            return View(model);
-        }
+        var user = result.Data!;
 
         // Lưu thông tin người dùng vào Session (Chuẩn môn PRN222)
         HttpContext.Session.SetInt32("UserId", user.UserId);
         HttpContext.Session.SetString("Username", user.Username);
         HttpContext.Session.SetString("FullName", user.FullName);
-        HttpContext.Session.SetString("Role", user.Role.RoleName);
+        HttpContext.Session.SetString("Role", user.RoleName);
 
         TempData["SuccessMessage"] = $"Đăng nhập thành công! Chào mừng {user.FullName}.";
 
-        return RedirectToLocal(model.ReturnUrl, user.Role.RoleName);
+        return RedirectToLocal(model.ReturnUrl, user.RoleName);
     }
 
     // POST: /Account/Logout (UC-02 - Đăng xuất xóa Session)
@@ -79,33 +70,8 @@ public class AccountController(CinemaDbContext context, IPasswordService passwor
         var userId = HttpContext.Session.GetInt32("UserId");
         if (userId == null) return RedirectToAction("Login");
 
-        var user = await context.Users
-            .Include(u => u.Role)
-            .Include(u => u.Admin)
-            .Include(u => u.CinemaManager)
-            .Include(u => u.Staff)
-            .Include(u => u.Customer)
-            .FirstOrDefaultAsync(u => u.UserId == userId.Value);
-
-        if (user == null) return NotFound();
-
-        string? code = user.Admin?.AdminCode
-            ?? user.CinemaManager?.ManagerCode
-            ?? user.Staff?.StaffCode
-            ?? user.Customer?.CustomerCode;
-
-        var vm = new ProfileViewModel
-        {
-            UserId = user.UserId,
-            Username = user.Username,
-            FullName = user.FullName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber,
-            RoleName = user.Role.RoleName,
-            UserCode = code,
-            Status = user.Status,
-            CreatedAt = user.CreatedAt
-        };
+        var vm = await accountService.GetProfileAsync(userId.Value);
+        if (vm == null) return NotFound();
 
         return View(vm);
     }
@@ -118,15 +84,8 @@ public class AccountController(CinemaDbContext context, IPasswordService passwor
         var userId = HttpContext.Session.GetInt32("UserId");
         if (userId == null) return RedirectToAction("Login");
 
-        var user = await context.Users.FindAsync(userId.Value);
-        if (user == null) return NotFound();
-
-        var vm = new UpdateProfileViewModel
-        {
-            FullName = user.FullName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber
-        };
+        var vm = await accountService.GetUpdateProfileAsync(userId.Value);
+        if (vm == null) return NotFound();
 
         return View(vm);
     }
@@ -145,25 +104,17 @@ public class AccountController(CinemaDbContext context, IPasswordService passwor
         var userId = HttpContext.Session.GetInt32("UserId");
         if (userId == null) return RedirectToAction("Login");
 
-        var user = await context.Users.FindAsync(userId.Value);
-        if (user == null) return NotFound();
+        var result = await accountService.UpdateProfileAsync(userId.Value, model);
+        if (result.IsNotFound) return NotFound();
 
-        // Kiểm tra email duy nhất với các user khác
-        bool emailExists = await context.Users.AnyAsync(u => u.Email == model.Email && u.UserId != userId.Value);
-        if (emailExists)
+        if (!result.Succeeded)
         {
-            ModelState.AddModelError("Email", "Email này đã được sử dụng bởi tài khoản khác.");
+            AddErrorsToModelState(result);
             return View(model);
         }
 
-        user.FullName = model.FullName;
-        user.Email = model.Email;
-        user.PhoneNumber = model.PhoneNumber;
-
-        await context.SaveChangesAsync();
-
         // Cập nhật lại FullName trong Session
-        HttpContext.Session.SetString("FullName", user.FullName);
+        HttpContext.Session.SetString("FullName", result.Data!);
 
         TempData["SuccessMessage"] = "Cập nhật hồ sơ thành công!";
         return RedirectToAction(nameof(Profile));
@@ -191,17 +142,14 @@ public class AccountController(CinemaDbContext context, IPasswordService passwor
         var userId = HttpContext.Session.GetInt32("UserId");
         if (userId == null) return RedirectToAction("Login");
 
-        var user = await context.Users.FindAsync(userId.Value);
-        if (user == null) return NotFound();
+        var result = await accountService.ChangePasswordAsync(userId.Value, model);
+        if (result.IsNotFound) return NotFound();
 
-        if (!passwordService.VerifyPassword(model.CurrentPassword, user.PasswordHash))
+        if (!result.Succeeded)
         {
-            ModelState.AddModelError("CurrentPassword", "Mật khẩu hiện tại không chính xác.");
+            AddErrorsToModelState(result);
             return View(model);
         }
-
-        user.PasswordHash = passwordService.HashPassword(model.NewPassword);
-        await context.SaveChangesAsync();
 
         TempData["SuccessMessage"] = "Đổi mật khẩu thành công!";
         return RedirectToAction(nameof(Profile));
@@ -212,6 +160,14 @@ public class AccountController(CinemaDbContext context, IPasswordService passwor
     public IActionResult AccessDenied()
     {
         return View();
+    }
+
+    private void AddErrorsToModelState(ServiceResult result)
+    {
+        foreach (var error in result.Errors)
+        {
+            ModelState.AddModelError(error.Field, error.Message);
+        }
     }
 
     private IActionResult RedirectToLocal(string? returnUrl, string? role = null)
