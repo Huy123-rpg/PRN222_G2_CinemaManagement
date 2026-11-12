@@ -1,6 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using PRN222_CinemaManagement.Data;
+using PRN222_CinemaManagement.Repositories.ImpleRepositories;
+using PRN222_CinemaManagement.Repositories.IRepositories;
 using PRN222_CinemaManagement.Services;
+using PRN222_CinemaManagement.Services.ImpleService;
+using PRN222_CinemaManagement.Services.IService;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,7 +14,12 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddDbContext<CinemaDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("CinemaDb")));
 
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddHttpContextAccessor();
 
 // Cấu hình Session chuẩn môn PRN222 (không dùng Cookie/JWT phức tạp)
