@@ -17,6 +17,10 @@ public sealed class Movie
 
     public DateOnly? ReleaseDate { get; set; }
 
+    public MovieStatus Status { get; set; } = MovieStatus.ComingSoon;
+
     [StringLength(500), Url]
     public string? PosterUrl { get; set; }
+
+    public ICollection<Screening> Screenings { get; set; } = new List<Screening>();
 }
