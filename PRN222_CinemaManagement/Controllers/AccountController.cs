@@ -59,7 +59,7 @@ public class AccountController(IAccountService accountService) : Controller
         // Xóa toàn bộ dữ liệu trong Session
         HttpContext.Session.Clear();
         TempData["SuccessMessage"] = "Đăng xuất thành công.";
-        return RedirectToAction("Login", "Account");
+        return RedirectToAction("Index", "Home");
     }
 
     // GET: /Account/Profile (UC-03)
@@ -177,9 +177,9 @@ public class AccountController(IAccountService accountService) : Controller
             return Redirect(returnUrl);
         }
 
-        if (role == "Admin")
+        if (role is "Admin" or "CinemaManager" or "Staff")
         {
-            return RedirectToAction("Index", "Employee");
+            return RedirectToAction("Index", "Dashboard");
         }
 
         return RedirectToAction("Index", "Home");

@@ -1,0 +1,183 @@
+@model ScreeningScheduleViewModel
+@{
+    ViewData["Title"] = "Lịch chiếu";
+    var isWeek = Model.ViewMode == "week";
+    var endDate = Model.Date.AddDays(Model.DayCount - 1);
+    var displayRooms = Model.Auditoriums.Where(r => !Model.AuditoriumId.HasValue || r.Id == Model.AuditoriumId.Value).ToList();
+    var today = (DateOnly)ViewBag.TodayDate;
+}
+
+<section class="schedule-page" aria-labelledby="schedule-title">
+    <header class="schedule-page-header">
+        <div>
+            <p class="schedule-eyebrow">QUẢN LÝ RẠP</p>
+            <h1 id="schedule-title">Lịch chiếu</h1>
+            <p class="text-muted mb-0">Xem và so sánh lịch của nhiều ngày theo từng phòng.</p>
+        </div>
+        <div class="schedule-index-actions">
+            <a class="btn btn-outline-primary schedule-action" asp-action="CreateBatch">Lập lịch theo đợt</a>
+            <a class="btn btn-primary schedule-action" asp-action="Create" asp-route-date="@Model.SelectedDate" asp-route-auditoriumId="@Model.AuditoriumId">Tạo suất đơn</a>
+        </div>
+    </header>
+
+    <form method="get" class="schedule-filter card card-body schedule-week-filter" aria-label="Điều hướng và lọc lịch chiếu">
+        <input type="hidden" name="view" value="@Model.ViewMode" />
+        <div class="schedule-week-controls">
+            <div class="schedule-view-switch" role="group" aria-label="Chế độ xem lịch">
+                <a class="@(isWeek ? "active" : "")" aria-current="@(isWeek ? "page" : null)" asp-action="Index" asp-route-view="week" asp-route-date="@Model.SelectedDate" asp-route-auditoriumId="@Model.AuditoriumId">Tuần</a>
+                <a class="@(!isWeek ? "active" : "")" aria-current="@(!isWeek ? "page" : null)" asp-action="Index" asp-route-view="day" asp-route-date="@Model.SelectedDate" asp-route-auditoriumId="@Model.AuditoriumId">Ngày</a>
+            </div>
+            <div class="schedule-week-nav">
+                <a class="btn btn-outline-secondary" asp-action="Index" asp-route-view="@Model.ViewMode" asp-route-date="@(Model.SelectedDate.AddDays(isWeek ? -7 : -1))" asp-route-auditoriumId="@Model.AuditoriumId" aria-label="@(isWeek ? "Tuần trước" : "Ngày trước")">‹</a>
+                <a class="btn btn-outline-primary" asp-action="Index" asp-route-view="@Model.ViewMode" asp-route-date="@today" asp-route-auditoriumId="@Model.AuditoriumId">Hôm nay</a>
+                <a class="btn btn-outline-secondary" asp-action="Index" asp-route-view="@Model.ViewMode" asp-route-date="@(Model.SelectedDate.AddDays(isWeek ? 7 : 1))" asp-route-auditoriumId="@Model.AuditoriumId" aria-label="@(isWeek ? "Tuần sau" : "Ngày sau")">›</a>
+            </div>
+            <div class="schedule-period-title">
+                @if (isWeek)
+                {
+                    <strong>@Model.Date.ToString("dd/MM") – @endDate.ToString("dd/MM/yyyy")</strong>
+                    <span>Tuần @System.Globalization.ISOWeek.GetWeekOfYear(Model.Date.ToDateTime(TimeOnly.MinValue))</span>
+                }
+                else
+                {
+                    <strong>@Model.Date.ToString("dddd, dd/MM/yyyy")</strong>
+                    <span>@Model.Screenings.Count suất chiếu</span>
+                }
+            </div>
+            <div class="schedule-filter-room">
+                <label for="auditoriumId" class="form-label">Phòng chiếu</label>
+                <select id="auditoriumId" name="auditoriumId" class="form-select">
+                    <option value="">Tất cả phòng</option>
+                    @foreach (var room in Model.Auditoriums)
+                    {
+                        if (Model.AuditoriumId == room.Id)
+                        {
+                            <option value="@room.Id" selected>@room.Name</option>
+                        }
+                        else
+                        {
+                            <option value="@room.Id">@room.Name</option>
+                        }
+                    }
+                </select>
+            </div>
+            <input type="date" name="date" value="@Model.SelectedDate.ToString("yyyy-MM-dd")" class="form-control schedule-filter-date" aria-label="Chọn ngày hoặc tuần" />
+            <button type="submit" class="btn btn-primary schedule-action">Áp dụng</button>
+        </div>
+    </form>
+
+    @if (isWeek)
+    {
+        <div class="schedule-week-heading">
+            <div><h2>Lịch theo phòng</h2><p>@Model.Screenings.Count suất trong tuần <span aria-hidden="true">·</span> Mỗi hàng là giờ bắt đầu trong ngày; giờ kết thúc nằm trên thẻ suất.</p></div>
+            <span class="schedule-timezone">Giờ Việt Nam</span>
+        </div>
+
+        @if (Model.Screenings.Count == 0)
+        {
+            <div class="schedule-empty card">
+                <h3>Chưa có suất chiếu trong tuần này</h3>
+                <p class="text-muted">Chuyển tuần, đổi bộ lọc phòng hoặc lập lịch mới.</p>
+                <div><a class="btn btn-primary schedule-action" asp-action="CreateBatch">Lập lịch theo đợt</a></div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive schedule-week-table-wrap">
+                <table class="table schedule-week-table align-middle mb-0">
+                    <caption class="visually-hidden">Lịch chiếu từ @Model.Date.ToString("dd/MM/yyyy") đến @endDate.ToString("dd/MM/yyyy"), các cột chia theo phòng chiếu</caption>
+                    <thead>
+                        <tr><th scope="col" class="schedule-week-time-head">Ngày / giờ</th>
+                        @foreach (var room in displayRooms)
+                        {
+                            <th scope="col">@room.Name</th>
+                        }
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @for (var dayOffset = 0; dayOffset < Model.DayCount; dayOffset++)
+                    {
+                        var day = Model.Date.AddDays(dayOffset);
+                        var dayScreenings = Model.Screenings.Where(s => DateOnly.FromDateTime(s.StartAtLocal) == day).ToList();
+                        <tr class="schedule-week-day-divider"><th scope="rowgroup" colspan="@(displayRooms.Count + 1)">
+                            <span>@day.ToString("dddd", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"))</span>
+                            <strong>@day.ToString("dd/MM/yyyy")</strong>
+                            <small>@dayScreenings.Count suất</small>
+                        </th></tr>
+                        @if (dayScreenings.Count == 0)
+                        {
+                            <tr class="schedule-week-empty-row"><th scope="row">—</th><td colspan="@displayRooms.Count">Ngày này chưa có suất chiếu.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var time in dayScreenings.Select(s => s.StartAtLocal.TimeOfDay).Distinct().OrderBy(t => t))
+                            {
+                                <tr class="schedule-week-time-row">
+                                    <th scope="row"><strong>@time.ToString(@"hh\:mm")</strong></th>
+                                    @foreach (var room in displayRooms)
+                                    {
+                                        var screening = dayScreenings.FirstOrDefault(s => s.AuditoriumId == room.Id && s.StartAtLocal.TimeOfDay == time);
+                                        <td>
+                                            @if (screening != null)
+                                            {
+                                                var statusLabel = screening.Status switch { "Scheduled" => "Đã lên lịch", "Ongoing" => "Đang chiếu", "Finished" => "Đã chiếu", "Cancelled" => "Đã hủy", _ => screening.Status };
+                                                var statusClass = screening.Status switch { "Scheduled" => "schedule-status-scheduled", "Ongoing" => "schedule-status-ongoing", "Finished" => "schedule-status-finished", "Cancelled" => "schedule-status-cancelled", _ => "schedule-status-finished" };
+                                                var endLabel = screening.EndAtLocal.Date == screening.StartAtLocal.Date ? screening.EndAtLocal.ToString("HH:mm") : screening.EndAtLocal.ToString("dd/MM HH:mm");
+                                                <article class="schedule-week-card">
+                                                    <div class="schedule-week-card-top"><span class="schedule-week-card-time">@screening.StartAtLocal.ToString("HH:mm")–@endLabel</span><span class="schedule-status @statusClass">@statusLabel</span></div>
+                                                    <h3>@screening.MovieTitle</h3>
+                                                    <p>@screening.BasePrice.ToString("N0") đ</p>
+                                                    @if (screening.CanEdit)
+                                                    {
+                                                        <a asp-action="Edit" asp-route-id="@screening.ScreeningId" asp-route-date="@Model.SelectedDate" asp-route-auditoriumId="@Model.AuditoriumId">Đổi lịch</a>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="schedule-week-locked" title="Chỉ đổi lịch suất Scheduled trong tương lai khi chưa có booking hoặc vé.">Không thể đổi</span>
+                                                    }
+                                                </article>
+                                            }
+                                            else
+                                            {
+                                                <span class="schedule-week-slot-empty" aria-label="Không có suất chiếu">—</span>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="schedule-results-heading">
+            <div><h2>Suất chiếu ngày @Model.Date.ToString("dd/MM/yyyy")</h2><p class="text-muted mb-0">@Model.Screenings.Count suất chiếu</p></div>
+        </div>
+        @if (Model.Screenings.Count == 0)
+        {
+            <div class="schedule-empty card"><h3>Chưa có suất chiếu trong ngày này</h3><p class="text-muted">Thử chọn ngày hoặc phòng khác, hoặc lập lịch mới.</p><div><a class="btn btn-primary schedule-action" asp-action="Create" asp-route-date="@Model.Date" asp-route-auditoriumId="@Model.AuditoriumId">Tạo suất đơn</a></div></div>
+        }
+        else
+        {
+            <div class="table-responsive schedule-table-wrap">
+                <table class="table align-middle mb-0">
+                    <caption class="visually-hidden">Các suất chiếu ngày @Model.Date.ToString("dd/MM/yyyy")</caption>
+                    <thead><tr><th scope="col">Giờ chiếu</th><th scope="col">Phim</th><th scope="col">Phòng</th><th scope="col">Giá cơ bản</th><th scope="col">Trạng thái</th><th scope="col"><span class="visually-hidden">Thao tác</span></th></tr></thead>
+                    <tbody>
+                    @foreach (var screening in Model.Screenings)
+                    {
+                        var statusLabel = screening.Status switch { "Scheduled" => "Đã lên lịch", "Ongoing" => "Đang chiếu", "Finished" => "Đã chiếu", "Cancelled" => "Đã hủy", _ => screening.Status };
+                        var statusClass = screening.Status switch { "Scheduled" => "text-bg-primary", "Ongoing" => "text-bg-success", "Finished" => "text-bg-secondary", "Cancelled" => "text-bg-dark", _ => "text-bg-secondary" };
+                        var endLabel = screening.EndAtLocal.Date == screening.StartAtLocal.Date ? screening.EndAtLocal.ToString("HH:mm") : screening.EndAtLocal.ToString("dd/MM HH:mm");
+                        <tr><td class="text-nowrap"><strong>@screening.StartAtLocal.ToString("HH:mm")</strong>–@endLabel</td><td class="schedule-movie">@screening.MovieTitle</td><td>@screening.AuditoriumName</td><td class="text-nowrap">@screening.BasePrice.ToString("N0") đ</td><td><span class="badge @statusClass">@statusLabel</span></td><td>@if (screening.CanEdit) { <a class="btn btn-sm btn-outline-primary schedule-row-action" asp-action="Edit" asp-route-id="@screening.ScreeningId" asp-route-date="@Model.Date" asp-route-auditoriumId="@Model.AuditoriumId">Đổi lịch</a> } else { <span class="text-muted small" title="Chỉ đổi lịch suất Scheduled trong tương lai khi chưa có booking hoặc vé.">Không thể đổi</span> }</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</section>

@@ -21,6 +21,8 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IScreeningRepository, ScreeningRepository>();
 builder.Services.AddScoped<IScreeningScheduleService, ScreeningScheduleService>();
+builder.Services.AddScoped<IMovieRepository, MovieRepository>();
+builder.Services.AddScoped<IMovieService, MovieService>();
 builder.Services.AddHttpContextAccessor();
 
 // Cấu hình Session chuẩn môn PRN222 (không dùng Cookie/JWT phức tạp)

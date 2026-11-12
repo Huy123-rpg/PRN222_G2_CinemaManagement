@@ -1,0 +1,72 @@
+@using Microsoft.AspNetCore.Http
+@{
+    var role = Context.Session.GetString("Role");
+    var fullName = Context.Session.GetString("FullName") ?? Context.Session.GetString("Username");
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Cinema Operations</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="operations-shell">
+    <header class="operations-topbar">
+        <a class="operations-brand" asp-controller="Dashboard" asp-action="Index"><span class="operations-brand-mark">C</span><span>Cinema <strong>Operations</strong></span></a>
+        <div class="operations-user">
+            <a asp-controller="Account" asp-action="Profile" class="operations-user-name">@fullName <span class="operations-role">@role</span></a>
+            <a asp-controller="Home" asp-action="Index" class="operations-public-link">Trang khách hàng</a>
+            <form asp-controller="Account" asp-action="Logout" method="post">
+                <button type="submit" class="operations-logout">Đăng xuất</button>
+            </form>
+        </div>
+    </header>
+
+    <div class="operations-layout">
+        <aside class="operations-sidebar">
+            <p class="operations-sidebar-label">MENU CHÍNH</p>
+            <nav aria-label="Điều hướng vận hành">
+                <a class="operations-nav-link @(controller == "Dashboard" ? "active" : "")" aria-current="@(controller == "Dashboard" ? "page" : null)" asp-controller="Dashboard" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">⌂</span>Dashboard</a>
+                @if (role is "Staff" or "CinemaManager" or "Admin")
+                {
+                    <a class="operations-nav-link @(controller == "Ticket" ? "active" : "")" aria-current="@(controller == "Ticket" ? "page" : null)" asp-controller="Ticket" asp-action="StaffLookup"><span class="operations-nav-icon" aria-hidden="true">▣</span>Tra cứu & soát vé</a>
+                }
+                @if (role is "CinemaManager" or "Admin")
+                {
+                    <p class="operations-sidebar-label operations-sidebar-spaced">QUẢN LÝ RẠP</p>
+                    <a class="operations-nav-link @(controller == "Screening" ? "active" : "")" aria-current="@(controller == "Screening" ? "page" : null)" asp-controller="Screening" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">▦</span>Lịch chiếu</a>
+                    <a class="operations-nav-link @(controller == "Movie" ? "active" : "")" aria-current="@(controller == "Movie" ? "page" : null)" asp-controller="Movie" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">▤</span>Phim</a>
+                    <a class="operations-nav-link @(controller == "Auditorium" ? "active" : "")" aria-current="@(controller == "Auditorium" ? "page" : null)" asp-controller="Auditorium" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">▥</span>Phòng chiếu</a>
+                    <a class="operations-nav-link @(controller == "Pricing" ? "active" : "")" aria-current="@(controller == "Pricing" ? "page" : null)" asp-controller="Pricing" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">＄</span>Bảng giá vé</a>
+                }
+                @if (role == "Admin")
+                {
+                    <p class="operations-sidebar-label operations-sidebar-spaced">HỆ THỐNG</p>
+                    <a class="operations-nav-link @(controller == "Employee" ? "active" : "")" aria-current="@(controller == "Employee" ? "page" : null)" asp-controller="Employee" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">♙</span>Nhân viên</a>
+                }
+            </nav>
+            <div class="operations-sidebar-footer"><span class="operations-status-dot"></span>Đang làm việc với hệ thống</div>
+        </aside>
+
+        <main class="operations-content" role="main">
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">@TempData["SuccessMessage"]<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button></div>
+            }
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">@TempData["ErrorMessage"]<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button></div>
+            }
+            @RenderBody()
+        </main>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

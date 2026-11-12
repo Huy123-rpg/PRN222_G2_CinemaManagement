@@ -1,43 +1,80 @@
-@using Microsoft.AspNetCore.Http
+@model PRN222_CinemaManagement.ViewModels.HomePageViewModel
 @{
     ViewData["Title"] = "Trang chủ";
-    var username = Context.Session.GetString("Username");
-    var fullName = Context.Session.GetString("FullName") ?? username;
-    var role = Context.Session.GetString("Role");
-    bool isLoggedIn = !string.IsNullOrEmpty(username);
 }
 
-<div class="py-4">
-    @if (isLoggedIn)
-    {
-        <div class="alert alert-secondary py-2 mb-4">
-            Đang đăng nhập: <strong>@fullName</strong> | Vai trò: <strong>@role</strong>
+<main class="cinema-home">
+    <section class="cinema-home-hero">
+        <div class="cinema-home-hero-copy">
+            <p class="cinema-home-eyebrow">TRẢI NGHIỆM ĐIỆN ẢNH</p>
+            <h1>Một bộ phim hay.<br />Một buổi tối đáng nhớ.</h1>
+            <p>Khám phá phim đang chiếu và sắp khởi chiếu tại rạp.</p>
+            <a asp-controller="Movie" asp-action="Index" asp-route-tab="showing" class="btn cinema-home-cta">Khám phá phim đang chiếu <span aria-hidden="true">→</span></a>
         </div>
+        <div class="cinema-home-hero-art" aria-hidden="true"><span>PHIM<br />HAY<br /><b>TRÊN<br />MÀN ẢNH LỚN</b></span></div>
+    </section>
 
-        <div class="d-flex gap-2">
-            @if (role == "Admin")
+    <section class="cinema-home-section" aria-labelledby="now-showing-title">
+        <header class="cinema-home-section-heading">
+            <div><p class="cinema-home-eyebrow">ĐANG ĐƯỢC TRÌNH CHIẾU</p><h2 id="now-showing-title">Phim đang chiếu</h2></div>
+            <a asp-controller="Movie" asp-action="Index" asp-route-tab="showing">Tất cả phim <span aria-hidden="true">→</span></a>
+        </header>
+        <div class="cinema-movie-grid">
+            @if (Model.NowShowing.Count == 0)
             {
-                <a asp-controller="Employee" asp-action="Index" class="btn btn-primary">Quản lý nhân viên</a>
+                <p class="cinema-home-empty">Hiện chưa có phim đang chiếu.</p>
             }
-            @if (role == "CinemaManager" || role == "Admin")
+            @foreach (var movie in Model.NowShowing)
             {
-                <a asp-controller="Auditorium" asp-action="Index" class="btn btn-primary">Quản lý phòng chiếu</a>
-                <a asp-controller="Pricing" asp-action="Index" class="btn btn-outline-primary">Bảng giá vé</a>
+                <article class="cinema-movie-card">
+                    <a asp-controller="Movie" asp-action="Index" asp-route-tab="showing" class="cinema-movie-poster-link" aria-label="Xem danh sách phim đang chiếu">
+                        @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                        {
+                            <img class="cinema-movie-poster" src="@movie.PosterUrl" alt="Poster phim @movie.Title" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="cinema-movie-poster cinema-movie-placeholder">POSTER</div>
+                        }
+                        <span class="cinema-movie-age">@movie.AgeRating</span>
+                    </a>
+                    <h3>@movie.Title</h3>
+                    <p>@(movie.Genres.Count > 0 ? string.Join(" · ", movie.Genres) : "Phim điện ảnh")<span aria-hidden="true"> · </span>@movie.DurationMinutes phút</p>
+                    <a class="cinema-movie-button" asp-controller="Movie" asp-action="Index" asp-route-tab="showing">Xem lịch phim</a>
+                </article>
             }
-            @if (role == "Customer")
-            {
-                <a asp-controller="Ticket" asp-action="MyBookings" class="btn btn-primary">Vé của tôi</a>
-            }
-            @if (role == "Staff" || role == "CinemaManager" || role == "Admin")
-            {
-                <a asp-controller="Ticket" asp-action="StaffLookup" class="btn btn-success">Tra cứu & Soát vé</a>
-            }
-            <a asp-controller="Account" asp-action="Profile" class="btn btn-outline-secondary">Hồ sơ cá nhân</a>
         </div>
-    }
-    else
-    {
-        <p>Vui lòng đăng nhập để sử dụng hệ thống.</p>
-        <a asp-controller="Account" asp-action="Login" class="btn btn-primary">Đăng nhập</a>
-    }
-</div>
+    </section>
+
+    <section class="cinema-home-section cinema-upcoming-section" aria-labelledby="upcoming-title">
+        <header class="cinema-home-section-heading">
+            <div><p class="cinema-home-eyebrow">SẮP RA MẮT</p><h2 id="upcoming-title">Phim sắp chiếu</h2></div>
+            <a asp-controller="Movie" asp-action="Index" asp-route-tab="upcoming">Xem lịch khởi chiếu <span aria-hidden="true">→</span></a>
+        </header>
+        <div class="cinema-movie-grid">
+            @if (Model.Upcoming.Count == 0)
+            {
+                <p class="cinema-home-empty">Chưa có phim sắp chiếu.</p>
+            }
+            @foreach (var movie in Model.Upcoming)
+            {
+                <article class="cinema-movie-card">
+                    <a asp-controller="Movie" asp-action="Index" asp-route-tab="upcoming" class="cinema-movie-poster-link" aria-label="Xem danh sách phim sắp chiếu">
+                        @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                        {
+                            <img class="cinema-movie-poster" src="@movie.PosterUrl" alt="Poster phim @movie.Title" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="cinema-movie-poster cinema-movie-placeholder">POSTER</div>
+                        }
+                        <span class="cinema-movie-age">@movie.AgeRating</span>
+                    </a>
+                    <h3>@movie.Title</h3>
+                    <p>@(movie.Genres.Count > 0 ? string.Join(" · ", movie.Genres) : "Phim điện ảnh")<span aria-hidden="true"> · </span>@movie.DurationMinutes phút</p>
+                    <div class="cinema-release-date">Khởi chiếu: @(movie.ReleaseDate?.ToString("dd/MM/yyyy") ?? "Sẽ cập nhật")</div>
+                </article>
+            }
+        </div>
+    </section>
+</main>

@@ -1,0 +1,155 @@
+@model ScreeningFormViewModel
+@{
+    var isEdit = Model.ScreeningId.HasValue;
+    ViewData["Title"] = isEdit ? "Đổi lịch chiếu" : "Tạo suất chiếu";
+}
+
+<section class="schedule-page" aria-labelledby="screening-form-title">
+    <div class="schedule-breadcrumb"><a asp-action="Index" asp-route-date="@Model.ReturnDate" asp-route-auditoriumId="@Model.ReturnAuditoriumId">Lịch chiếu</a><span aria-hidden="true">/</span><span>@ViewData["Title"]</span></div>
+    <header class="schedule-form-header">
+        <div>
+            <p class="schedule-eyebrow">QUẢN LÝ RẠP</p>
+            <h1 id="screening-form-title">@ViewData["Title"]</h1>
+            <p class="text-muted mb-0">Giờ nhập theo giờ Việt Nam. Giờ kết thúc tự tính theo thời lượng phim.</p>
+        </div>
+    </header>
+
+    @if (!Model.CanSave)
+    {
+        <div class="alert alert-warning" role="status">@Model.ReadOnlyMessage</div>
+    }
+
+    <form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@Model.ScreeningId" method="post" class="schedule-form card" id="screening-form">
+        <input type="hidden" asp-for="ScreeningId" />
+        <input type="hidden" asp-for="ReturnDate" />
+        <input type="hidden" asp-for="ReturnAuditoriumId" />
+        <div asp-validation-summary="All" class="schedule-validation-summary alert alert-danger" role="alert" aria-live="assertive" tabindex="-1"></div>
+
+        <div class="schedule-form-grid">
+            <div class="schedule-field">
+                <label asp-for="MovieId" class="form-label">Phim <span class="schedule-required">*</span></label>
+                <select asp-for="MovieId" class="form-select" disabled="@(!Model.CanSave)" aria-required="true" aria-describedby="movie-help">
+                    <option value="">-- Chọn phim --</option>
+                    @foreach (var movie in Model.Movies)
+                    {
+                        <option value="@movie.Id" data-duration="@movie.DurationMinutes" data-release="@movie.ReleaseDate?.ToString("yyyy-MM-dd")">@movie.Title · @movie.DurationMinutes phút</option>
+                    }
+                </select>
+                <div id="movie-help" class="form-text">Chỉ chọn được phim sắp chiếu hoặc đang chiếu.</div>
+                <span asp-validation-for="MovieId" class="text-danger"></span>
+            </div>
+
+            <div class="schedule-field">
+                <label asp-for="AuditoriumId" class="form-label">Phòng chiếu <span class="schedule-required">*</span></label>
+                <select asp-for="AuditoriumId" class="form-select" disabled="@(!Model.CanSave)" aria-required="true">
+                    <option value="">-- Chọn phòng đang hoạt động --</option>
+                    @foreach (var room in Model.Auditoriums)
+                    {
+                        <option value="@room.Id">@room.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="AuditoriumId" class="text-danger"></span>
+            </div>
+
+            <div class="schedule-field">
+                <label asp-for="StartAtLocal" class="form-label">Ngày giờ bắt đầu <span class="schedule-required">*</span></label>
+                <input asp-for="StartAtLocal" type="datetime-local" asp-format="{0:yyyy-MM-ddTHH:mm}" class="form-control" disabled="@(!Model.CanSave)" aria-required="true" aria-describedby="schedule-time-help schedule-end-preview" />
+                <div id="schedule-time-help" class="form-text">Thời điểm bắt đầu phải ở tương lai.</div>
+                <output id="schedule-end-preview" class="schedule-end-preview" aria-live="polite">Chọn phim và giờ để xem giờ kết thúc dự kiến.</output>
+                <span asp-validation-for="StartAtLocal" class="text-danger"></span>
+            </div>
+
+            <div class="schedule-field">
+                <label asp-for="BasePrice" class="form-label">Giá cơ bản <span class="schedule-required">*</span></label>
+                <div class="input-group">
+                    <input asp-for="BasePrice" type="number" min="0" step="1000" class="form-control" disabled="@(!Model.CanSave)" aria-describedby="price-help" />
+                    <span class="input-group-text">đ</span>
+                </div>
+                <div id="price-help" class="form-text">Giá mỗi ghế được tính theo giá cơ bản nhân hệ số loại ghế.</div>
+                <span asp-validation-for="BasePrice" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div id="screening-conflicts" class="schedule-conflicts" hidden="@(Model.Conflicts.Count == 0)">
+            <div class="schedule-conflict-heading">
+                <h2>Lịch chiếu bị xung đột</h2>
+                <p class="mb-0">Phòng cần trống ít nhất 15 phút sau suất chiếu trước.</p>
+            </div>
+            <ul class="list-group">
+                @foreach (var conflict in Model.Conflicts)
+                {
+                    var endLabel = conflict.EndAtLocal.Date == conflict.StartAtLocal.Date ? conflict.EndAtLocal.ToString("HH:mm") : conflict.EndAtLocal.ToString("dd/MM HH:mm");
+                    <li class="list-group-item">
+                        <strong>@conflict.MovieTitle</strong>
+                        <span>@conflict.AuditoriumName</span>
+                        <time>@conflict.StartAtLocal.ToString("dd/MM/yyyy HH:mm")–@endLabel</time>
+                    </li>
+                }
+            </ul>
+        </div>
+        <p id="conflict-stale-message" class="alert alert-info" role="status" hidden>Thông tin lịch đã thay đổi; hãy kiểm tra lại. Hệ thống vẫn kiểm tra lần cuối khi lưu.</p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.CheckMessage))
+        {
+            <div id="screening-check-message" class="alert @(Model.Conflicts.Count == 0 ? "alert-success" : "alert-warning")" role="status" aria-live="polite">@Model.CheckMessage</div>
+        }
+
+        <div class="schedule-form-actions">
+            @if (Model.CanSave)
+            {
+                <button class="btn btn-outline-primary schedule-action" type="submit" name="checkOnly" value="true">Kiểm tra trùng lịch</button>
+                <button class="btn btn-primary schedule-action" type="submit" data-save-screening disabled="@(Model.Conflicts.Count > 0)">@(isEdit ? "Lưu thay đổi" : "Tạo suất chiếu")</button>
+            }
+            <a class="btn btn-link schedule-cancel" asp-action="Index" asp-route-date="@Model.ReturnDate" asp-route-auditoriumId="@Model.ReturnAuditoriumId">Quay lại lịch</a>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const form = document.getElementById("screening-form");
+            const movie = document.getElementById("MovieId");
+            const start = document.getElementById("StartAtLocal");
+            const preview = document.getElementById("schedule-end-preview");
+            const conflictList = document.getElementById("screening-conflicts");
+            const checkMessage = document.getElementById("screening-check-message");
+            const staleMessage = document.getElementById("conflict-stale-message");
+            const saveButton = form?.querySelector("[data-save-screening]");
+
+            function updateEndTime() {
+                const duration = Number(movie?.selectedOptions[0]?.dataset.duration);
+                if (!start?.value || !duration) {
+                    preview.textContent = "Chọn phim và giờ để xem giờ kết thúc dự kiến.";
+                    return;
+                }
+                const end = new Date(`${start.value}:00Z`);
+                end.setUTCMinutes(end.getUTCMinutes() + duration);
+                preview.textContent = `Dự kiến kết thúc: ${new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "UTC" }).format(end)} (giờ Việt Nam)`;
+            }
+
+            function updateReleaseLimit() {
+                const releaseDate = movie?.selectedOptions[0]?.dataset.release;
+                if (start) start.min = releaseDate ? `${releaseDate}T00:00` : "";
+            }
+
+            movie?.addEventListener("change", () => { updateEndTime(); updateReleaseLimit(); });
+            start?.addEventListener("input", updateEndTime);
+            updateReleaseLimit();
+            updateEndTime();
+
+            if (checkMessage || (conflictList && !conflictList.hidden)) {
+                [movie, start, document.getElementById("AuditoriumId")].forEach(field => field?.addEventListener("change", () => {
+                    if (conflictList) conflictList.hidden = true;
+                    if (checkMessage) checkMessage.hidden = true;
+                    staleMessage.hidden = false;
+                    if (saveButton) saveButton.disabled = false;
+                }));
+            }
+
+            const summary = form?.querySelector(".validation-summary-errors");
+            if (summary) summary.focus();
+        })();
+    </script>
+}

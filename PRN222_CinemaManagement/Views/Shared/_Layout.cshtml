@@ -4,6 +4,7 @@
     var fullName = Context.Session.GetString("FullName") ?? username;
     var role = Context.Session.GetString("Role");
     bool isLoggedIn = !string.IsNullOrEmpty(username);
+    bool isOperationsUser = role is "Staff" or "CinemaManager" or "Admin";
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -16,7 +17,7 @@
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-light border-bottom mb-3">
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom mb-3 customer-navbar">
             <div class="container">
                 <a class="navbar-brand fw-bold" asp-controller="Home" asp-action="Index">Cinema Management</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse">
@@ -27,31 +28,13 @@
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-controller="Home" asp-action="Index">Trang chủ</a>
                         </li>
-                        @if (isLoggedIn && role == "Admin")
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link text-dark fw-semibold" asp-controller="Employee" asp-action="Index">Quản lý nhân viên</a>
-                            </li>
-                        }
-                        @if (isLoggedIn && (role == "CinemaManager" || role == "Admin"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link text-dark fw-semibold" asp-controller="Auditorium" asp-action="Index">Phòng chiếu</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link text-dark fw-semibold" asp-controller="Pricing" asp-action="Index">Bảng giá vé</a>
-                            </li>
-                        }
+                        <li class="nav-item">
+                            <a class="nav-link text-dark fw-semibold" asp-controller="Movie" asp-action="Index">Phim</a>
+                        </li>
                         @if (isLoggedIn && role == "Customer")
                         {
                             <li class="nav-item">
                                 <a class="nav-link text-dark fw-semibold" asp-controller="Ticket" asp-action="MyBookings">Vé của tôi</a>
-                            </li>
-                        }
-                        @if (isLoggedIn && (role == "Staff" || role == "CinemaManager" || role == "Admin"))
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link text-dark fw-semibold" asp-controller="Ticket" asp-action="StaffLookup">Tra cứu & Soát vé</a>
                             </li>
                         }
                     </ul>
@@ -59,10 +42,12 @@
                         @if (isLoggedIn)
                         {
                             <li class="nav-item me-3">
-                                <a class="nav-link text-dark p-0" asp-controller="Account" asp-action="Profile">
-                                    Xin chào, <strong>@fullName</strong> (@role)
-                                </a>
+                                <a class="nav-link text-dark p-0" asp-controller="Account" asp-action="Profile">Xin chào, <strong>@fullName</strong></a>
                             </li>
+                            @if (isOperationsUser)
+                            {
+                                <li class="nav-item me-2"><a class="btn btn-outline-primary btn-sm" asp-controller="Dashboard" asp-action="Index">Khu vận hành</a></li>
+                            }
                             <li class="nav-item">
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
                                     <button type="submit" class="btn btn-outline-secondary btn-sm">Đăng xuất</button>
