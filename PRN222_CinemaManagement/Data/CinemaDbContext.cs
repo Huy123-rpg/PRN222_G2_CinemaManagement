@@ -24,6 +24,8 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
     public DbSet<ConcessionItem> ConcessionItems => Set<ConcessionItem>();
     public DbSet<BookingConcession> BookingConcessions => Set<BookingConcession>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<ConcessionSale> ConcessionSales => Set<ConcessionSale>();
+    public DbSet<ConcessionSaleItem> ConcessionSaleItems => Set<ConcessionSaleItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -525,6 +527,65 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.BookingId).HasDatabaseName("IX_Payments_Booking");
+        });
+
+        // 20. ConcessionSales
+        modelBuilder.Entity<ConcessionSale>(entity =>
+        {
+            entity.HasKey(e => e.ConcessionSaleId);
+            entity.Property(e => e.SaleCode).HasMaxLength(40).IsUnicode(false).IsRequired();
+            entity.HasIndex(e => e.SaleCode).IsUnique();
+            entity.Property(e => e.SaleDate).HasPrecision(0).HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.TotalAmount).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.PaymentMethod).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Cash");
+            entity.Property(e => e.Status).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Completed");
+            entity.Property(e => e.RowVersion).IsRowVersion();
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ConcessionSales_Total", "[TotalAmount] >= 0");
+                t.HasCheckConstraint("CK_ConcessionSales_Status", "[Status] IN ('Completed','Cancelled')");
+            });
+
+            entity.HasOne(e => e.Staff)
+                .WithMany()
+                .HasForeignKey(e => e.StaffId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.StaffId).HasDatabaseName("IX_ConcessionSales_Staff");
+            entity.HasIndex(e => e.SaleDate).HasDatabaseName("IX_ConcessionSales_Date");
+        });
+
+        // 21. ConcessionSaleItems
+        modelBuilder.Entity<ConcessionSaleItem>(entity =>
+        {
+            entity.HasKey(e => e.ConcessionSaleItemId);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.Subtotal)
+                .HasPrecision(18, 2)
+                .HasComputedColumnSql("CONVERT(decimal(18,2), [Quantity] * [UnitPrice])", stored: true);
+
+            entity.HasIndex(e => new { e.ConcessionSaleId, e.ConcessionItemId })
+                .IsUnique()
+                .HasDatabaseName("UQ_ConcessionSaleItems_Item");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ConcessionSaleItems_Quantity", "[Quantity] > 0");
+                t.HasCheckConstraint("CK_ConcessionSaleItems_UnitPrice", "[UnitPrice] >= 0");
+            });
+
+            entity.HasOne(e => e.ConcessionSale)
+                .WithMany(s => s.ConcessionSaleItems)
+                .HasForeignKey(e => e.ConcessionSaleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.ConcessionItem)
+                .WithMany()
+                .HasForeignKey(e => e.ConcessionItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ConcessionItemId).HasDatabaseName("IX_ConcessionSaleItems_Item");
         });
     }
 }

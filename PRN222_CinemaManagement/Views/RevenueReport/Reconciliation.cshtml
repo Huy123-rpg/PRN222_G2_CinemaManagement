@@ -1,0 +1,263 @@
+@model IEnumerable<PRN222_CinemaManagement.Services.IService.ReconciliationItem>
+@{
+    ViewData["Title"] = "Đối soát doanh thu vé & bắp nước (TEC-08)";
+    string selectedDate = ViewBag.SelectedDate ?? "";
+    string displayDate = ViewBag.DisplayDate ?? "";
+
+    decimal grossRevenue = ViewBag.GrossRevenue ?? 0m;
+    decimal totalRefund = ViewBag.TotalRefund ?? 0m;
+    decimal netRevenue = ViewBag.NetRevenue ?? 0m;
+    decimal totalTicketRevenue = ViewBag.TotalTicketRevenue ?? 0m;
+    decimal totalConcessionRevenue = ViewBag.TotalConcessionRevenue ?? 0m;
+    decimal standaloneRevenue = ViewBag.StandaloneRevenue ?? 0m;
+    decimal bookingConcessionRevenue = ViewBag.BookingConcessionRevenue ?? 0m;
+
+    int totalChecked = ViewBag.TotalChecked ?? 0;
+    int discrepancyCount = ViewBag.DiscrepancyCount ?? 0;
+    int insufficientCount = ViewBag.InsufficientCount ?? 0;
+    string overallStatus = ViewBag.OverallStatus ?? "NoData";
+
+    var discrepancies = Model.Where(i => i.Status == "Discrepancy").ToList();
+}
+
+<div class="container my-3">
+    @* Thanh điều hướng báo cáo và nút in *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <div class="btn-group btn-group-sm mb-2 d-print-none">
+                <a asp-action="Daily" asp-route-date="@selectedDate" class="btn btn-outline-primary">Báo cáo theo ngày (UC-28)</a>
+                <a asp-action="Shift" asp-route-date="@selectedDate" class="btn btn-outline-primary">Báo cáo theo ca (UC-29)</a>
+                <a asp-action="Cancellation" class="btn btn-outline-primary">Báo cáo hủy vé (UC-30)</a>
+                <a asp-action="Reconciliation" asp-route-date="@selectedDate" class="btn btn-primary active">Đối soát doanh thu (TEC-08)</a>
+            </div>
+            <h3 class="text-primary mb-0">Đối soát doanh thu ngày @displayDate</h3>
+        </div>
+        <button onclick="window.print()" class="btn btn-outline-secondary btn-sm d-print-none">
+            <i class="bi bi-printer"></i> In báo cáo
+        </button>
+    </div>
+
+    @* Form chọn ngày đối soát *@
+    <div class="card shadow-sm mb-3 d-print-none">
+        <div class="card-body py-2">
+            <form method="get" asp-action="Reconciliation" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label mb-0 small fw-semibold">Chọn ngày đối soát:</label>
+                    <input type="date" name="date" value="@selectedDate" class="form-control form-control-sm" required />
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-search"></i> Đối soát
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Banner kết luận đối soát độc lập *@
+    @if (overallStatus == "NoData")
+    {
+        <div class="alert alert-secondary py-2 mb-3 small d-flex align-items-center shadow-sm">
+            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+            <div>
+                <strong>Trạng thái đối soát: Không có dữ liệu giao dịch.</strong>
+                Không có thanh toán đặt vé hoặc bán bắp nước nào được ghi nhận trong ngày @displayDate để đối chiếu.
+            </div>
+        </div>
+    }
+    else if (overallStatus == "Discrepancy")
+    {
+        <div class="alert alert-danger py-2 mb-3 small d-flex align-items-center shadow-sm">
+            <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
+            <div>
+                <strong>Trạng thái đối soát: PHÁT HIỆN CHÊNH LỆCH (@discrepancyCount giao dịch sai lệch).</strong>
+                Số tiền ghi nhận giữa thanh toán, giá trị đơn và chi tiết món có sự không nhất quán, vui lòng kiểm tra bảng chênh lệch bên dưới.
+            </div>
+        </div>
+    }
+    else if (overallStatus == "InsufficientData")
+    {
+        <div class="alert alert-warning py-2 mb-3 small d-flex align-items-center shadow-sm">
+            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+            <div>
+                <strong>Trạng thái đối soát: CHƯA ĐỦ DỮ LIỆU XÁC MINH (@insufficientCount giao dịch).</strong>
+                Một số đơn hàng/hóa đơn có tổng tiền nhưng thiếu danh sách chi tiết các món/vé con để đối chiếu chéo độc lập.
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success py-2 mb-3 small d-flex align-items-center shadow-sm">
+            <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+            <div>
+                <strong>Trạng thái đối soát: KHỚP HOÀN TOÀN (100% nhất quán).</strong>
+                Tất cả @totalChecked giao dịch trong ngày đều khớp chính xác giữa tiền khách thanh toán, giá trị ghi nhận trên đơn và tổng chi tiết món/vé.
+            </div>
+        </div>
+    }
+
+    @* Thẻ tổng hợp KPI doanh thu và kiểm tra *@
+    <div class="row g-2 mb-3">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-primary h-100 p-2">
+                <div class="text-muted small">Doanh thu trước hoàn tiền (Gross):</div>
+                <h5 class="text-primary fw-bold my-1">@grossRevenue.ToString("N0") đ</h5>
+                <div class="small text-muted" style="font-size: 0.8rem;">
+                    Vé: @(totalTicketRevenue > 0 ? totalTicketRevenue.ToString("N0") + "đ" : "0đ") | Bắp nước: @totalConcessionRevenue.ToString("N0") đ
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-danger h-100 p-2">
+                <div class="text-muted small">Tổng tiền hoàn trả (Refund):</div>
+                <h5 class="text-danger fw-bold my-1">@totalRefund.ToString("N0") đ</h5>
+                <div class="small text-muted" style="font-size: 0.8rem;">Từ RefundAmount của Payment</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-success h-100 p-2">
+                <div class="text-muted small">Doanh thu thực tế (Net):</div>
+                <h5 class="text-success fw-bold my-1">@netRevenue.ToString("N0") đ</h5>
+                <div class="small text-muted" style="font-size: 0.8rem;">Doanh thu thuần sau khi trừ hoàn tiền</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-info h-100 p-2">
+                <div class="text-muted small">Giao dịch đã kiểm tra:</div>
+                <h5 class="text-dark fw-bold my-1">@totalChecked giao dịch</h5>
+                <div class="small" style="font-size: 0.8rem;">
+                    @if (discrepancyCount > 0)
+                    {
+                        <span class="text-danger fw-bold"><i class="bi bi-x-circle"></i> @discrepancyCount có chênh lệch</span>
+                    }
+                    else
+                    {
+                        <span class="text-success"><i class="bi bi-check-circle"></i> 0 chênh lệch</span>
+                    }
+                    @if (insufficientCount > 0)
+                    {
+                        <span class="text-warning ms-1">(@insufficientCount thiếu dữ liệu)</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Danh sách các giao dịch có chênh lệch nếu phát hiện *@
+    @if (discrepancies.Any())
+    {
+        <div class="card shadow-sm border-danger mb-3">
+            <div class="card-header bg-danger text-white py-2 fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-exclamation-triangle-fill me-1"></i> Danh sách giao dịch có chênh lệch (@discrepancies.Count)</span>
+                <span class="badge bg-light text-danger">Cần xử lý</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã giao dịch</th>
+                            <th>Thời gian</th>
+                            <th>Loại</th>
+                            <th>Người thực hiện</th>
+                            <th class="text-end">Tiền trên đơn</th>
+                            <th class="text-end">Tổng chi tiết món</th>
+                            <th class="text-end">Thanh toán</th>
+                            <th class="text-end text-danger fw-bold">Chênh lệch</th>
+                            <th>Nguyên nhân / Chi tiết</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var d in discrepancies)
+                        {
+                            <tr>
+                                <td class="font-monospace fw-bold">@d.Code</td>
+                                <td>@d.TransactionTime.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td><span class="badge bg-secondary">@d.TransactionType</span></td>
+                                <td>@d.Actor</td>
+                                <td class="text-end">@d.HeaderAmount.ToString("N0") đ</td>
+                                <td class="text-end">@d.DetailAmount.ToString("N0") đ</td>
+                                <td class="text-end">@d.PaidAmount.ToString("N0") đ</td>
+                                <td class="text-end text-danger fw-bold">@d.Difference.ToString("N0") đ</td>
+                                <td class="text-danger">@d.Reason</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* Bảng toàn bộ các giao dịch đã đối soát trong ngày *@
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light py-2 fw-bold text-dark d-flex justify-content-between align-items-center">
+            <span>Chi tiết toàn bộ giao dịch đã đối soát trong ngày (@totalChecked giao dịch)</span>
+            <small class="text-muted">Bao gồm bán lẻ quầy và vé & bắp nước đặt kèm</small>
+        </div>
+        @if (!Model.Any())
+        {
+            <div class="card-body text-center py-4 text-muted">
+                <i class="bi bi-inbox fs-2 d-block mb-1"></i>
+                Không có giao dịch nào được ghi nhận trong ngày này.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã giao dịch</th>
+                            <th>Thời gian</th>
+                            <th>Loại</th>
+                            <th>Người thực hiện</th>
+                            <th class="text-end">Giá trị đơn</th>
+                            <th class="text-end">Tổng chi tiết</th>
+                            <th class="text-end">Thanh toán</th>
+                            <th class="text-end">Hoàn trả</th>
+                            <th class="text-center">Trạng thái</th>
+                            <th>Ghi chú đối soát</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="font-monospace fw-bold">@item.Code</td>
+                                <td>@item.TransactionTime.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td><span class="badge bg-secondary">@item.TransactionType</span></td>
+                                <td>@item.Actor</td>
+                                <td class="text-end">@item.HeaderAmount.ToString("N0") đ</td>
+                                <td class="text-end">@item.DetailAmount.ToString("N0") đ</td>
+                                <td class="text-end">@item.PaidAmount.ToString("N0") đ</td>
+                                <td class="text-end text-danger">@(item.RefundAmount > 0 ? item.RefundAmount.ToString("N0") + " đ" : "-")</td>
+                                <td class="text-center">
+                                    @if (item.Status == "Matched")
+                                    {
+                                        <span class="badge bg-success">Khớp</span>
+                                    }
+                                    else if (item.Status == "Discrepancy")
+                                    {
+                                        <span class="badge bg-danger">Chênh lệch</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">Chưa đủ dữ liệu</span>
+                                    }
+                                </td>
+                                <td>
+                                    <small class="@(item.Status == "Discrepancy" ? "text-danger fw-semibold" : (item.Status == "InsufficientData" ? "text-warning" : "text-muted"))">
+                                        @item.Reason
+                                    </small>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    @@media print { .d-print-none { display: none !important; } }
+</style>

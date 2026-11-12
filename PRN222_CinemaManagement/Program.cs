@@ -21,6 +21,12 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IScreeningRepository, ScreeningRepository>();
 builder.Services.AddScoped<IScreeningScheduleService, ScreeningScheduleService>();
+builder.Services.AddScoped<IConcessionRepository, ConcessionRepository>();
+builder.Services.AddScoped<IConcessionService, ConcessionService>();
+builder.Services.AddScoped<ICounterTicketRepository, CounterTicketRepository>();
+builder.Services.AddScoped<ICounterTicketService, CounterTicketService>();
+builder.Services.AddScoped<IRevenueReportRepository, RevenueReportRepository>();
+builder.Services.AddScoped<IRevenueReportService, RevenueReportService>();
 builder.Services.AddHttpContextAccessor();
 
 // Cấu hình Session chuẩn môn PRN222 (không dùng Cookie/JWT phức tạp)

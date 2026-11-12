@@ -1,0 +1,99 @@
+@model ConcessionSale
+@{
+    ViewData["Title"] = "Hóa đơn #" + Model.SaleCode;
+    var staffName = Model.Staff?.User?.FullName ?? Model.Staff?.StaffCode ?? "Thu ngân";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow-sm border p-4" id="receiptCard">
+            <div class="text-center border-bottom pb-3 mb-3">
+                <h4 class="fw-bold mb-1">CINEMA MANAGEMENT</h4>
+                <div class="text-uppercase text-muted small fw-semibold">Hóa đơn bắp nước (Concession Receipt)</div>
+                <div class="text-muted small">Mã hóa đơn: <strong class="text-dark">@Model.SaleCode</strong></div>
+            </div>
+
+            <div class="row mb-3 small">
+                <div class="col-6">
+                    <div><strong>Thời gian:</strong> @Model.SaleDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+                    <div><strong>Thu ngân:</strong> @staffName</div>
+                </div>
+                <div class="col-6 text-end">
+                    <div><strong>Phương thức:</strong> @Model.PaymentMethod</div>
+                    <div><strong>Trạng thái:</strong> <span class="badge bg-success">@Model.Status</span></div>
+                </div>
+            </div>
+
+            <table class="table table-sm table-bordered align-middle mb-3">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center" style="width: 40px;">#</th>
+                        <th>Món</th>
+                        <th class="text-center" style="width: 70px;">SL</th>
+                        <th class="text-end" style="width: 100px;">Đơn giá</th>
+                        <th class="text-end" style="width: 110px;">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int stt = 1; }
+                    @foreach (var item in Model.ConcessionSaleItems)
+                    {
+                        decimal subtotal = item.Subtotal > 0 ? item.Subtotal : (item.Quantity * item.UnitPrice);
+                        <tr>
+                            <td class="text-center text-muted">@(stt++)</td>
+                            <td>@(item.ConcessionItem?.Name ?? "Món #" + item.ConcessionItemId)</td>
+                            <td class="text-center fw-bold">@item.Quantity</td>
+                            <td class="text-end">@item.UnitPrice.ToString("N0") đ</td>
+                            <td class="text-end fw-semibold">@subtotal.ToString("N0") đ</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="table-light">
+                        <th colspan="4" class="text-end fs-6">Tổng cộng:</th>
+                        <th class="text-end text-danger fs-5 fw-bold">@Model.TotalAmount.ToString("N0") đ</th>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="text-center text-muted small border-top pt-3">
+                <p class="mb-1">Cảm ơn quý khách và chúc quý khách xem phim vui vẻ!</p>
+                <p class="mb-0">Cinema Management System - PRN222</p>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between mt-3 d-print-none">
+            <a asp-action="Index" class="btn btn-outline-primary">
+                &larr; Bán tiếp đơn mới
+            </a>
+            <div>
+                <button type="button" onclick="window.print()" class="btn btn-secondary me-2">
+                    In hóa đơn
+                </button>
+                <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary">
+                    Trang chủ
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @@media print {
+        header, footer, .d-print-none, .alert {
+            display: none !important;
+        }
+        body {
+            background-color: white !important;
+        }
+        .container {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        #receiptCard {
+            border: none !important;
+            box-shadow: none !important;
+            width: 100% !important;
+        }
+    }
+</style>

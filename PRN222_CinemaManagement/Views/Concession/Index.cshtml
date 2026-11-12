@@ -1,0 +1,195 @@
+@model IEnumerable<ConcessionItem>
+@{
+    ViewData["Title"] = "Bán Bắp & Nước";
+    int lowStockCount = Model.Count(c => c.StockQuantity <= c.LowStockThreshold);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="fw-bold mb-1">Quầy Bắp & Nước (Snack & Drink Sale)</h2>
+        <p class="text-muted mb-0">Chọn số lượng các món cần bán và xác nhận thanh toán.</p>
+    </div>
+    <div>
+        <a asp-action="LowStock" class="btn btn-outline-warning text-dark position-relative">
+            Cảnh báo tồn kho
+            @if (lowStockCount > 0)
+            {
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    @lowStockCount
+                </span>
+            }
+        </a>
+    </div>
+</div>
+
+@if (lowStockCount > 0)
+{
+    <div class="alert alert-warning d-flex align-items-center justify-content-between py-2 mb-3">
+        <div>
+            <strong>Cảnh báo tồn kho:</strong> Hiện có <strong>@lowStockCount</strong> mặt hàng sắp hết hoặc đã hết hàng trong kho.
+        </div>
+        <a asp-action="LowStock" class="btn btn-sm btn-warning text-dark fw-semibold">Xem chi tiết &rarr;</a>
+    </div>
+}
+
+<form asp-action="Sell" method="post" id="concessionForm">
+    @Html.AntiForgeryToken()
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white py-2">
+            <h5 class="mb-0 fs-6 fw-semibold">Danh sách món ăn & thức uống</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;" class="text-center">#</th>
+                        <th>Tên món</th>
+                        <th>Mô tả</th>
+                        <th style="width: 140px;" class="text-end">Đơn giá</th>
+                        <th style="width: 130px;" class="text-center">Tồn kho</th>
+                        <th style="width: 130px;" class="text-center">Số lượng bán</th>
+                        <th style="width: 150px;" class="text-end">Tạm tính</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int index = 1; }
+                    @foreach (var item in Model)
+                    {
+                        bool isOutOfStock = item.StockQuantity <= 0;
+                        <tr>
+                            <td class="text-center text-muted">@(index++)</td>
+                            <td>
+                                <strong>@item.Name</strong>
+                                <input type="hidden" name="itemIds" value="@item.ConcessionItemId" />
+                            </td>
+                            <td class="text-muted small">@(item.Description ?? "-")</td>
+                            <td class="text-end fw-semibold">@item.Price.ToString("N0") đ</td>
+                            <td class="text-center">
+                                @if (isOutOfStock)
+                                {
+                                    <span class="badge bg-danger">Hết hàng (0)</span>
+                                }
+                                else if (item.StockQuantity <= item.LowStockThreshold)
+                                {
+                                    <span class="badge bg-warning text-dark">Còn @item.StockQuantity (Sắp hết)</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">Còn @item.StockQuantity</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <input type="number" 
+                                       name="quantities" 
+                                       min="0" 
+                                       max="@item.StockQuantity" 
+                                       value="0" 
+                                       class="form-control form-control-sm text-center qty-input" 
+                                       data-price="@item.Price" 
+                                       data-target="subtotal-@item.ConcessionItemId"
+                                       @(isOutOfStock ? "readonly" : "") />
+                            </td>
+                            <td class="text-end fw-bold text-primary" id="subtotal-@item.ConcessionItemId">
+                                0 đ
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 bg-light p-3">
+        <div class="row align-items-center">
+            <div class="col-md-5 mb-3 mb-md-0">
+                <label class="form-label fw-semibold mb-1">Phương thức thanh toán:</label>
+                <div class="d-flex gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="paymentMethod" id="payCash" value="Cash" checked />
+                        <label class="form-check-label" for="payCash">Tiền mặt (Cash)</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="paymentMethod" id="payOnline" value="VNPay_Simulated" />
+                        <label class="form-check-label" for="payOnline">Chuyển khoản (VNPay)</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 text-md-end mb-3 mb-md-0">
+                <div class="text-muted small">Tổng tiền thanh toán:</div>
+                <div class="fs-3 fw-bold text-danger" id="totalAmountDisplay">0 đ</div>
+            </div>
+
+            <div class="col-md-3 text-md-end">
+                <button type="submit" class="btn btn-primary btn-lg w-100" id="btnSubmit" disabled>
+                    Xác nhận bán hàng
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.qty-input').forEach(input => {
+            input.addEventListener('input', updateTotals);
+        });
+
+        function updateTotals() {
+            let grandTotal = 0;
+            let hasError = false;
+            let hasSelected = false;
+
+            document.querySelectorAll('.qty-input').forEach(input => {
+                let price = parseFloat(input.dataset.price) || 0;
+                let qty = parseInt(input.value) || 0;
+                let max = parseInt(input.getAttribute('max')) || 0;
+                let targetId = input.dataset.target;
+                let subtotalElem = document.getElementById(targetId);
+
+                // Xóa trạng thái lỗi cũ
+                input.classList.remove('is-invalid');
+
+                if (qty < 0) {
+                    input.classList.add('is-invalid');
+                    hasError = true;
+                    if (subtotalElem) subtotalElem.innerHTML = '<span class="text-danger small">Số âm!</span>';
+                } else if (qty > max) {
+                    input.classList.add('is-invalid');
+                    hasError = true;
+                    if (subtotalElem) subtotalElem.innerHTML = '<span class="text-danger small">Vượt tồn kho!</span>';
+                } else if (qty > 0) {
+                    hasSelected = true;
+                    let lineTotal = price * qty;
+                    grandTotal += lineTotal;
+                    if (subtotalElem) subtotalElem.innerText = lineTotal.toLocaleString('vi-VN') + ' đ';
+                } else {
+                    if (subtotalElem) subtotalElem.innerText = '0 đ';
+                }
+            });
+
+            let totalDisplay = document.getElementById('totalAmountDisplay');
+            let submitBtn = document.getElementById('btnSubmit');
+
+            if (hasError) {
+                totalDisplay.innerHTML = '<span class="text-danger fs-5 fw-bold">Số lượng vượt tồn kho!</span>';
+                submitBtn.disabled = true;
+            } else {
+                totalDisplay.innerText = grandTotal.toLocaleString('vi-VN') + ' đ';
+                submitBtn.disabled = !hasSelected;
+            }
+        }
+
+        // Chống gửi trùng khi nhân viên click nhiều lần
+        document.getElementById('concessionForm').addEventListener('submit', function (e) {
+            let submitBtn = document.getElementById('btnSubmit');
+            if (submitBtn.disabled) {
+                e.preventDefault();
+                return false;
+            }
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý bán hàng...';
+        });
+    </script>
+}
