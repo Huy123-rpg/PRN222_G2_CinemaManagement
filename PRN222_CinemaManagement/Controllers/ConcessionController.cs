@@ -14,22 +14,47 @@ namespace PRN222_CinemaManagement.Controllers;
 [SessionAuthorize(Roles = "Staff,CinemaManager,Admin")]
 public class ConcessionController(IConcessionService concessionService) : Controller
 {
-    // GET: /Concession
-    // Hiển thị danh mục bắp nước đang kinh doanh để bán hàng (UC-15)
+    // GET: /Concession?page=1
+    // Hiển thị danh mục bắp nước đang kinh doanh để bán hàng (UC-15, phân trang 10 món/trang)
     [HttpGet]
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(int page = 1)
     {
-        var items = await concessionService.GetActiveItemsAsync();
+        const int pageSize = 10;
+        if (page < 1) page = 1;
+
+        var (items, totalCount) = await concessionService.GetActiveItemsPagedAsync(page, pageSize);
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        var lowStockList = await concessionService.GetLowStockItemsAsync();
+        ViewBag.LowStockCount = lowStockList.Count;
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
+
         return View(items);
     }
 
-    // GET: /Concession/LowStock
-    // Cảnh báo các mặt hàng tồn kho thấp hoặc đã hết hàng (UC-17)
+    // GET: /Concession/LowStock?page=1
+    // Cảnh báo các mặt hàng tồn kho thấp hoặc đã hết hàng (UC-17, phân trang 10 món/trang)
     [HttpGet]
-    public async Task<IActionResult> LowStock()
+    public async Task<IActionResult> LowStock(int page = 1)
     {
-        var lowStockItems = await concessionService.GetLowStockItemsAsync();
-        return View(lowStockItems);
+        const int pageSize = 10;
+        if (page < 1) page = 1;
+
+        var (items, totalCount, outOfStock, lowStock) = await concessionService.GetLowStockItemsPagedAsync(page, pageSize);
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
+        ViewBag.TotalOutOfStock = outOfStock;
+        ViewBag.TotalLowStock = lowStock;
+
+        return View(items);
     }
 
     // POST: /Concession/Sell

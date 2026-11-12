@@ -97,3 +97,12 @@
         }
     }
 </style>
+
+@section Scripts {
+    <script>
+        // Xóa sạch giỏ hàng bắp nước sau khi bán thành công (UC-15)
+        try {
+            sessionStorage.removeItem('prn222_concession_cart');
+        } catch (e) {}
+    </script>
+}

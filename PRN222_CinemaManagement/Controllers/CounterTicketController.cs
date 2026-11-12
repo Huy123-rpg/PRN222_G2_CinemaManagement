@@ -21,15 +21,24 @@ public class CounterConcessionInput
 [SessionAuthorize(Roles = "Staff,CinemaManager,Admin")]
 public class CounterTicketController(ICounterTicketService counterTicketService) : Controller
 {
-    // GET: /CounterTicket
-    // Hiển thị danh sách phim đang chiếu và các suất chiếu có thể bán vé.
+    // GET: /CounterTicket?movieId=1&page=1
+    // Hiển thị danh sách phim đang chiếu và các suất chiếu có thể bán vé (phân trang 10 dòng/trang).
     [HttpGet]
-    public async Task<IActionResult> Index(int? movieId)
+    public async Task<IActionResult> Index(int? movieId, int page = 1)
     {
+        const int pageSize = 10;
+        if (page < 1) page = 1;
+
+        var (screenings, totalCount) = await counterTicketService.GetAvailableScreeningsPagedAsync(movieId, page, pageSize);
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
         ViewBag.Movies = await counterTicketService.GetShowingMoviesAsync();
         ViewBag.SelectedMovieId = movieId;
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
 
-        var screenings = await counterTicketService.GetAvailableScreeningsAsync(movieId);
         return View(screenings);
     }
 

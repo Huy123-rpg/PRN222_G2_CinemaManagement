@@ -14,6 +14,7 @@ public interface ICounterTicketRepository
 {
     Task<List<Movie>> GetShowingMoviesAsync();
     Task<List<Screening>> GetAvailableScreeningsAsync(int? movieId);
+    Task<(List<Screening> Items, int TotalCount)> GetAvailableScreeningsPagedAsync(int? movieId, int page, int pageSize);
     Task<Screening?> GetScreeningByIdAsync(int screeningId);
     Task<List<ScreeningSeat>> GetScreeningSeatsAsync(int screeningId);
     Task<List<ScreeningSeat>> GetSeatsForSaleAsync(int screeningId, IEnumerable<int> seatIds);

@@ -8,7 +8,9 @@ namespace PRN222_CinemaManagement.Repositories.IRepositories;
 public interface IConcessionRepository
 {
     Task<List<ConcessionItem>> GetActiveItemsAsync();
+    Task<(List<ConcessionItem> Items, int TotalCount)> GetActiveItemsPagedAsync(int page, int pageSize);
     Task<List<ConcessionItem>> GetLowStockItemsAsync();
+    Task<(List<ConcessionItem> Items, int TotalCount, int OutOfStockCount, int LowStockCount)> GetLowStockItemsPagedAsync(int page, int pageSize);
     Task<ConcessionSale?> GetSaleByIdAsync(int saleId);
     Task<Staff?> GetStaffByUserIdAsync(int userId);
     Task<List<ConcessionItem>> GetItemsByIdsAsync(IEnumerable<int> ids);

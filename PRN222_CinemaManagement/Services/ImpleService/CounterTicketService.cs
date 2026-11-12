@@ -17,6 +17,9 @@ public class CounterTicketService(ICounterTicketRepository counterTicketReposito
     public Task<List<Screening>> GetAvailableScreeningsAsync(int? movieId) =>
         counterTicketRepository.GetAvailableScreeningsAsync(movieId);
 
+    public Task<(List<Screening> Items, int TotalCount)> GetAvailableScreeningsPagedAsync(int? movieId, int page, int pageSize) =>
+        counterTicketRepository.GetAvailableScreeningsPagedAsync(movieId, page, pageSize);
+
     public async Task<(Screening? Screening, List<ScreeningSeat> Seats)> GetScreeningSeatsMapAsync(int screeningId)
     {
         var screening = await counterTicketRepository.GetScreeningByIdAsync(screeningId);

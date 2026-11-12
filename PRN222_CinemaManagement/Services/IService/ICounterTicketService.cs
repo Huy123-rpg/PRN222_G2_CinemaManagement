@@ -18,6 +18,7 @@ public interface ICounterTicketService
 {
     Task<List<Movie>> GetShowingMoviesAsync();
     Task<List<Screening>> GetAvailableScreeningsAsync(int? movieId);
+    Task<(List<Screening> Items, int TotalCount)> GetAvailableScreeningsPagedAsync(int? movieId, int page, int pageSize);
     Task<(Screening? Screening, List<ScreeningSeat> Seats)> GetScreeningSeatsMapAsync(int screeningId);
     Task<List<ConcessionItem>> GetAvailableConcessionsAsync();
     Task<CounterReceiptResult?> GetReceiptAsync(int bookingId);

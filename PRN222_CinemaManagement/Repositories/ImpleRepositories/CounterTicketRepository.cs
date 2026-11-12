@@ -38,6 +38,38 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
         return query.OrderBy(s => s.StartAt).ToListAsync();
     }
 
+    public async Task<(List<Screening> Items, int TotalCount)> GetAvailableScreeningsPagedAsync(int? movieId, int page, int pageSize)
+    {
+        var now = DateTime.UtcNow;
+        var query = db.Screenings
+            .AsNoTracking()
+            .Include(s => s.Movie)
+            .Include(s => s.Auditorium)
+            .Where(s => s.Status == "Scheduled"
+                     && s.StartAt > now
+                     && s.Movie.Status == "Showing"
+                     && s.Auditorium.Status == "Active");
+
+        if (movieId.HasValue && movieId.Value > 0)
+        {
+            query = query.Where(s => s.MovieId == movieId.Value);
+        }
+
+        int totalCount = await query.CountAsync();
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var items = await query
+            .OrderBy(s => s.StartAt)
+            .ThenBy(s => s.ScreeningId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
     public Task<Screening?> GetScreeningByIdAsync(int screeningId) =>
         db.Screenings
             .AsNoTracking()

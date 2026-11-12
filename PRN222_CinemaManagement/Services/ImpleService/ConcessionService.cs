@@ -14,8 +14,14 @@ public class ConcessionService(IConcessionRepository concessionRepository) : ICo
     public Task<List<ConcessionItem>> GetActiveItemsAsync() =>
         concessionRepository.GetActiveItemsAsync();
 
+    public Task<(List<ConcessionItem> Items, int TotalCount)> GetActiveItemsPagedAsync(int page, int pageSize) =>
+        concessionRepository.GetActiveItemsPagedAsync(page, pageSize);
+
     public Task<List<ConcessionItem>> GetLowStockItemsAsync() =>
         concessionRepository.GetLowStockItemsAsync();
+
+    public Task<(List<ConcessionItem> Items, int TotalCount, int OutOfStockCount, int LowStockCount)> GetLowStockItemsPagedAsync(int page, int pageSize) =>
+        concessionRepository.GetLowStockItemsPagedAsync(page, pageSize);
 
     public Task<ConcessionSale?> GetSaleDetailsAsync(int saleId) =>
         concessionRepository.GetSaleByIdAsync(saleId);

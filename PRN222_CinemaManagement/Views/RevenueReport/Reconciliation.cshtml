@@ -17,7 +17,11 @@
     int insufficientCount = ViewBag.InsufficientCount ?? 0;
     string overallStatus = ViewBag.OverallStatus ?? "NoData";
 
-    var discrepancies = Model.Where(i => i.Status == "Discrepancy").ToList();
+    var discrepancies = ViewBag.Discrepancies as List<PRN222_CinemaManagement.Services.IService.ReconciliationItem> ?? Model.Where(i => i.Status == "Discrepancy").ToList();
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int totalPages = ViewBag.TotalPages ?? 1;
+    int totalItems = ViewBag.TotalItems ?? Model.Count();
+    int pageSize = ViewBag.PageSize ?? 10;
 }
 
 <div class="container my-3">
@@ -254,6 +258,36 @@
                     </tbody>
                 </table>
             </div>
+            @if (totalPages > 1)
+            {
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 d-print-none">
+                    <div class="text-muted small">
+                        Hiển thị @(((currentPage - 1) * pageSize) + 1) - @Math.Min(currentPage * pageSize, totalItems) trên tổng số @totalItems giao dịch
+                    </div>
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Reconciliation" asp-route-date="@selectedDate" asp-route-page="@(currentPage - 1)">&laquo; Trước</a>
+                            </li>
+                            @for (int p = 1; p <= totalPages; p++)
+                            {
+                                <li class="page-item @(p == currentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Reconciliation" asp-route-date="@selectedDate" asp-route-page="@p">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Reconciliation" asp-route-date="@selectedDate" asp-route-page="@(currentPage + 1)">Sau &raquo;</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+            else
+            {
+                <div class="card-footer bg-white text-muted small py-2 d-print-none">
+                    Hiển thị @totalItems / @totalItems giao dịch
+                </div>
+            }
         }
     </div>
 </div>

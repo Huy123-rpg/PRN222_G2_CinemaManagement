@@ -17,12 +17,58 @@ public class ConcessionRepository(CinemaDbContext db) : IConcessionRepository
             .OrderBy(c => c.Name)
             .ToListAsync();
 
+    public async Task<(List<ConcessionItem> Items, int TotalCount)> GetActiveItemsPagedAsync(int page, int pageSize)
+    {
+        var query = db.ConcessionItems
+            .AsNoTracking()
+            .Where(c => c.Status == "Active");
+
+        int totalCount = await query.CountAsync();
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var items = await query
+            .OrderBy(c => c.Name)
+            .ThenBy(c => c.ConcessionItemId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
     public Task<List<ConcessionItem>> GetLowStockItemsAsync() =>
         db.ConcessionItems
             .AsNoTracking()
             .Where(c => c.Status == "Active" && c.StockQuantity <= c.LowStockThreshold)
             .OrderBy(c => c.StockQuantity)
             .ToListAsync();
+
+    public async Task<(List<ConcessionItem> Items, int TotalCount, int OutOfStockCount, int LowStockCount)> GetLowStockItemsPagedAsync(int page, int pageSize)
+    {
+        var allLowStock = await db.ConcessionItems
+            .AsNoTracking()
+            .Where(c => c.Status == "Active" && c.StockQuantity <= c.LowStockThreshold)
+            .ToListAsync();
+
+        int totalCount = allLowStock.Count;
+        int outOfStock = allLowStock.Count(c => c.StockQuantity <= 0);
+        int lowStock = allLowStock.Count(c => c.StockQuantity > 0 && c.StockQuantity <= c.LowStockThreshold);
+
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var pagedItems = allLowStock
+            .OrderBy(c => c.StockQuantity)
+            .ThenBy(c => c.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return (pagedItems, totalCount, outOfStock, lowStock);
+    }
 
     public Task<ConcessionSale?> GetSaleByIdAsync(int saleId) =>
         db.ConcessionSales

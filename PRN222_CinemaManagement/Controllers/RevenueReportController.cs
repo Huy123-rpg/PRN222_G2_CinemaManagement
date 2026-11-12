@@ -18,7 +18,7 @@ public class RevenueReportController(IRevenueReportService revenueReportService)
 {
     // GET: /RevenueReport/Daily?date=2026-11-10 (UC-28)
     [HttpGet]
-    public async Task<IActionResult> Daily(DateTime? date)
+    public async Task<IActionResult> Daily(DateTime? date, int page = 1)
     {
         var vnDate = date?.Date ?? DateTime.UtcNow.AddHours(7).Date;
         var utcStart = vnDate.AddHours(-7);
@@ -41,12 +41,25 @@ public class RevenueReportController(IRevenueReportService revenueReportService)
         ViewBag.StandaloneConcessionOrderCount = summary.StandaloneConcessionOrderCount;
         ViewBag.ConcessionSales = summary.ConcessionSales;
 
-        return View(summary.Payments);
+        const int pageSize = 10;
+        int totalCount = summary.Payments.Count;
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var pagedPayments = summary.Payments.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
+
+        return View(pagedPayments);
     }
 
     // GET: /RevenueReport/Shift?date=2026-11-10&startTime=08:00&endTime=16:00&staffId=1 (UC-29)
     [HttpGet]
-    public async Task<IActionResult> Shift(DateTime? date, string? startTime, string? endTime, int? staffId)
+    public async Task<IActionResult> Shift(DateTime? date, string? startTime, string? endTime, int? staffId, int page = 1)
     {
         var vnDate = date?.Date ?? DateTime.UtcNow.AddHours(7).Date;
         if (!TimeSpan.TryParse(startTime, out var startTs)) startTs = new TimeSpan(8, 0, 0);
@@ -95,12 +108,25 @@ public class RevenueReportController(IRevenueReportService revenueReportService)
         ViewBag.StandaloneConcessionOrderCount = summary.StandaloneConcessionOrderCount;
         ViewBag.ConcessionSales = summary.ConcessionSales;
 
-        return View(summary.Payments);
+        const int pageSize = 10;
+        int totalCount = summary.Payments.Count;
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var pagedPayments = summary.Payments.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
+
+        return View(pagedPayments);
     }
 
     // GET: /RevenueReport/Cancellation?fromDate=...&toDate=...&statusFilter=... (UC-30)
     [HttpGet]
-    public async Task<IActionResult> Cancellation(DateTime? fromDate, DateTime? toDate, string? statusFilter)
+    public async Task<IActionResult> Cancellation(DateTime? fromDate, DateTime? toDate, string? statusFilter, int page = 1)
     {
         var result = await revenueReportService.GetCancellationReportAsync(fromDate, toDate, statusFilter);
 
@@ -112,12 +138,25 @@ public class RevenueReportController(IRevenueReportService revenueReportService)
         ViewBag.TotalCancelledValue = result.TotalCancelledValue;
         ViewBag.TotalRefunded = result.TotalRefund;
 
-        return View(result.Bookings);
+        const int pageSize = 10;
+        int totalCount = result.Bookings.Count;
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var pagedBookings = result.Bookings.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
+
+        return View(pagedBookings);
     }
 
     // GET: /RevenueReport/Reconciliation?date=2026-11-10 (TEC-08)
     [HttpGet]
-    public async Task<IActionResult> Reconciliation(DateTime? date)
+    public async Task<IActionResult> Reconciliation(DateTime? date, int page = 1)
     {
         var vnDate = date?.Date ?? DateTime.UtcNow.AddHours(7).Date;
         var utcStart = vnDate.AddHours(-7);
@@ -139,7 +178,21 @@ public class RevenueReportController(IRevenueReportService revenueReportService)
         ViewBag.DiscrepancyCount = rec.DiscrepancyCount;
         ViewBag.InsufficientCount = rec.InsufficientCount;
         ViewBag.OverallStatus = rec.OverallStatus;
+        ViewBag.Discrepancies = rec.Items.Where(i => i.Status == "Discrepancy").ToList();
 
-        return View(rec.Items);
+        const int pageSize = 10;
+        int totalCount = rec.Items.Count;
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var pagedItems = rec.Items.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalItems = totalCount;
+        ViewBag.PageSize = pageSize;
+
+        return View(pagedItems);
     }
 }

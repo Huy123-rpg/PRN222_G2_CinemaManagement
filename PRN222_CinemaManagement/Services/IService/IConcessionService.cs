@@ -11,7 +11,9 @@ public sealed record SellConcessionRequest(int StaffUserId, List<ConcessionSaleI
 public interface IConcessionService
 {
     Task<List<ConcessionItem>> GetActiveItemsAsync();
+    Task<(List<ConcessionItem> Items, int TotalCount)> GetActiveItemsPagedAsync(int page, int pageSize);
     Task<List<ConcessionItem>> GetLowStockItemsAsync();
+    Task<(List<ConcessionItem> Items, int TotalCount, int OutOfStockCount, int LowStockCount)> GetLowStockItemsPagedAsync(int page, int pageSize);
     Task<ConcessionSale?> GetSaleDetailsAsync(int saleId);
     Task<ServiceResult<ConcessionSale>> SellAsync(SellConcessionRequest request);
 }
