@@ -182,6 +182,12 @@ public class RevenueReportService(IRevenueReportRepository repository) : IRevenu
         // 3. Đối soát từng đơn đặt vé & bắp nước (kiểm tra thiếu payment, tiền lệch, split payment)
         foreach (var b in bookings)
         {
+            // Bỏ qua các đơn giữ chỗ tạm thời chưa thanh toán (Pending, Expired, Cancelled chưa có thanh toán)
+            if (b.Status == "Pending" || b.Status == "Expired" || (b.Status == "Cancelled" && !b.Payments.Any(p => p.PaymentStatus == "Success" || p.RefundAmount > 0)))
+            {
+                continue;
+            }
+
             var successPayments = b.Payments.Where(p => p.PaymentStatus == "Success" && p.Amount > 0).ToList();
             decimal totalPaid = successPayments.Sum(p => p.Amount);
             decimal refAmt = successPayments.Sum(p => p.RefundAmount);

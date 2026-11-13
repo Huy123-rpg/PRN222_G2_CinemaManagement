@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using PRN222_CinemaManagement.Constants;
 using PRN222_CinemaManagement.Filters;
 using PRN222_CinemaManagement.Repositories.IRepositories;
 using PRN222_CinemaManagement.Services.IService;
+using PRN222_CinemaManagement.ViewModels;
 
 namespace PRN222_CinemaManagement.Controllers;
 
@@ -21,19 +23,20 @@ public class CounterConcessionInput
 [SessionAuthorize(Roles = "Staff,CinemaManager,Admin")]
 public class CounterTicketController(ICounterTicketService counterTicketService) : Controller
 {
-    // GET: /CounterTicket?movieId=1&page=1
-    // Hiển thị danh sách phim đang chiếu và các suất chiếu có thể bán vé (phân trang 10 dòng/trang).
+    // GET: /CounterTicket?statusFilter=All&movieId=1&page=1
+    // Hiển thị danh sách phim đang chiếu / sắp chiếu và các suất chiếu có thể bán vé (phân trang 10 dòng/trang).
     [HttpGet]
-    public async Task<IActionResult> Index(int? movieId, int page = 1)
+    public async Task<IActionResult> Index(string? statusFilter = "All", int? movieId = null, int page = 1)
     {
         const int pageSize = 10;
         if (page < 1) page = 1;
 
-        var (screenings, totalCount) = await counterTicketService.GetAvailableScreeningsPagedAsync(movieId, page, pageSize);
+        var (screenings, totalCount) = await counterTicketService.GetAvailableScreeningsPagedAsync(movieId, page, pageSize, statusFilter);
         int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-        ViewBag.Movies = await counterTicketService.GetShowingMoviesAsync();
+        ViewBag.Movies = await counterTicketService.GetShowingMoviesAsync(statusFilter);
         ViewBag.SelectedMovieId = movieId;
+        ViewBag.StatusFilter = statusFilter ?? "All";
         ViewBag.CurrentPage = page;
         ViewBag.TotalPages = totalPages;
         ViewBag.TotalItems = totalCount;
@@ -59,10 +62,88 @@ public class CounterTicketController(ICounterTicketService counterTicketService)
         string formToken = Guid.NewGuid().ToString("N");
         HttpContext.Session.SetString("CounterTicketFormToken", formToken);
         ViewBag.FormToken = formToken;
+        ViewBag.HubUrl = "/hubs/seats";
 
+        // Kiểm tra xem session có đang giữ ghế nào cho suất chiếu này không (phục vụ reload F5)
+        int? holdingBookingId = HttpContext.Session.GetInt32($"CounterHoldingBookingId_{screeningId}");
+        DateTime? holdingExpiresAt = null;
+        if (holdingBookingId.HasValue)
+        {
+            var heldBooking = await counterTicketService.GetActivePendingCounterBookingAsync(holdingBookingId.Value);
+            if (heldBooking != null && heldBooking.ScreeningId == screeningId && heldBooking.ExpiresAt > DateTime.UtcNow)
+            {
+                holdingExpiresAt = heldBooking.ExpiresAt;
+            }
+            else
+            {
+                HttpContext.Session.Remove($"CounterHoldingBookingId_{screeningId}");
+                holdingBookingId = null;
+            }
+        }
+
+        ViewBag.HoldingBookingId = holdingBookingId;
+        ViewBag.HoldingExpiresAt = holdingExpiresAt;
         ViewBag.Screening = screening;
         ViewBag.ConcessionItems = await counterTicketService.GetAvailableConcessionsAsync();
         return View(seats);
+    }
+
+    // POST: /CounterTicket/HoldSeats
+    // Thu ngân giữ hoặc nhả ghế tạm thời 5 phút tại quầy (đồng bộ nguyên tử với Online Booking).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> HoldSeats([FromBody] SetSeatsRequest request, CancellationToken ct)
+    {
+        int? userId = HttpContext.Session.GetInt32("UserId");
+        if (!userId.HasValue)
+        {
+            return Unauthorized(new { message = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại." });
+        }
+
+        if (request.ScreeningSeatIds == null || request.ScreeningSeatIds.Length > BookingConstants.MaxSeatsPerBooking)
+        {
+            return BadRequest(new { message = $"Mỗi lần chọn tối đa {BookingConstants.MaxSeatsPerBooking} ghế." });
+        }
+
+        var result = await counterTicketService.HoldCounterSeatsAsync(
+            userId.Value,
+            request.ScreeningId,
+            request.BookingId,
+            request.ScreeningSeatIds,
+            ct);
+
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { message = result.Errors.FirstOrDefault()?.Message ?? "Không thể giữ ghế." });
+        }
+
+        if (result.Data?.BookingId > 0 && request.ScreeningSeatIds != null && request.ScreeningSeatIds.Length > 0)
+        {
+            HttpContext.Session.SetInt32($"CounterHoldingBookingId_{request.ScreeningId}", result.Data.BookingId.Value);
+        }
+        else
+        {
+            HttpContext.Session.Remove($"CounterHoldingBookingId_{request.ScreeningId}");
+        }
+
+        return Json(result.Data);
+    }
+
+    // POST: /CounterTicket/ReleaseSeats
+    // Giải phóng toàn bộ ghế đang giữ tại quầy khi hủy hoặc rời trang
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReleaseSeats([FromBody] SetSeatsRequest request, CancellationToken ct)
+    {
+        int? userId = HttpContext.Session.GetInt32("UserId");
+        if (!userId.HasValue || !request.BookingId.HasValue)
+        {
+            return Ok();
+        }
+
+        await counterTicketService.ReleaseCounterSeatsAsync(userId.Value, request.BookingId.Value, ct);
+        HttpContext.Session.Remove($"CounterHoldingBookingId_{request.ScreeningId}");
+        return Ok();
     }
 
     // POST: /CounterTicket/Sell
@@ -74,7 +155,8 @@ public class CounterTicketController(ICounterTicketService counterTicketService)
         List<int>? seatIds,
         List<CounterConcessionInput>? concessions,
         string? formToken,
-        string? paymentMethod = "Cash")
+        string? paymentMethod = "Cash",
+        int? holdingBookingId = null)
     {
         int? userId = HttpContext.Session.GetInt32("UserId");
         if (!userId.HasValue)
@@ -135,7 +217,8 @@ public class CounterTicketController(ICounterTicketService counterTicketService)
             screeningId,
             seatIds,
             concessionOrders,
-            paymentMethod ?? "Cash");
+            paymentMethod ?? "Cash",
+            holdingBookingId);
 
         var result = await counterTicketService.SellTicketsAsync(request);
 
@@ -146,9 +229,45 @@ public class CounterTicketController(ICounterTicketService counterTicketService)
         }
 
         TempData["SuccessMessage"] = result.Message;
+        HttpContext.Session.Remove($"CounterHoldingBookingId_{screeningId}");
 
         // Chỉ cần truyền BookingId, Service/Repository tự động tìm đúng hóa đơn bắp nước cùng giao dịch
         return RedirectToAction(nameof(Receipt), new { id = result.Data!.Booking.BookingId });
+    }
+
+    // GET: /CounterTicket/SeatSnapshot?screeningId=5&bookingId=123
+    // Cung cấp dữ liệu sơ đồ ghế mới nhất cho quầy và phân biệt chính xác ghế do chính quầy này giữ
+    [HttpGet]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> SeatSnapshot(int screeningId, int? bookingId)
+    {
+        var (screening, seats) = await counterTicketService.GetScreeningSeatsMapAsync(screeningId);
+        if (screening == null)
+        {
+            return NotFound(new { message = "Suất chiếu không tồn tại hoặc đã đóng." });
+        }
+
+        int? effectiveBookingId = bookingId ?? HttpContext.Session.GetInt32($"CounterHoldingBookingId_{screeningId}");
+
+        var result = new
+        {
+            screeningId,
+            serverNow = DateTime.UtcNow,
+            seats = seats.Select(s => new
+            {
+                screeningSeatId = s.ScreeningSeatId,
+                rowLabel = s.Seat.RowLabel,
+                seatNumber = s.Seat.SeatNumber,
+                seatType = s.Seat.SeatType.TypeName,
+                price = s.Price,
+                status = s.Status,
+                isMine = s.Status == BookingConstants.ScreeningSeatStatuses.Held
+                         && effectiveBookingId.HasValue
+                         && s.HeldByBookingId == effectiveBookingId.Value
+            })
+        };
+
+        return Json(result);
     }
 
     // GET: /CounterTicket/Receipt/5

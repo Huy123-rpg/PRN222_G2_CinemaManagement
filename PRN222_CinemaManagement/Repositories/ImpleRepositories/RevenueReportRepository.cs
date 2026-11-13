@@ -66,10 +66,11 @@ public class RevenueReportRepository(CinemaDbContext context) : IRevenueReportRe
             .Include(b => b.Screening).ThenInclude(sc => sc.Auditorium)
             .Include(b => b.Customer).ThenInclude(c => c!.User)
             .Include(b => b.Staff).ThenInclude(s => s!.User)
-            .Where(b => b.Status == "Cancelled"
-                     || b.Status == "Refunded"
-                     || b.Tickets.Any(t => t.Status == "Cancelled")
-                     || b.Payments.Any(p => p.RefundAmount > 0));
+            .Where(b => (b.Status == "Cancelled"
+                      || b.Status == "Refunded"
+                      || b.Tickets.Any(t => t.Status == "Cancelled")
+                      || b.Payments.Any(p => p.RefundAmount > 0))
+                     && (b.Tickets.Any() || b.Payments.Any(p => p.PaymentStatus == "Success" || p.RefundAmount > 0)));
 
         if (!string.IsNullOrEmpty(statusFilter) && statusFilter != "All")
         {
@@ -97,8 +98,11 @@ public class RevenueReportRepository(CinemaDbContext context) : IRevenueReportRe
             .Include(b => b.Staff).ThenInclude(s => s!.User)
             .Include(b => b.Customer).ThenInclude(c => c!.User)
             .Include(b => b.Screening).ThenInclude(sc => sc.Movie)
-            .Where(b => (b.BookingDate >= utcStart && b.BookingDate < utcEnd)
-                     || b.Payments.Any(p => p.PaidAt.HasValue && p.PaidAt.Value >= utcStart && p.PaidAt.Value < utcEnd))
+            .Where(b => ((b.BookingDate >= utcStart && b.BookingDate < utcEnd)
+                      || b.Payments.Any(p => p.PaidAt.HasValue && p.PaidAt.Value >= utcStart && p.PaidAt.Value < utcEnd))
+                     && b.Status != "Pending"
+                     && b.Status != "Expired"
+                     && !(b.Status == "Cancelled" && !b.Payments.Any(p => p.PaymentStatus == "Success" || p.RefundAmount > 0)))
             .OrderByDescending(b => b.BookingDate)
             .ToListAsync();
 }

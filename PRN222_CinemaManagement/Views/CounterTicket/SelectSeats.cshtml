@@ -4,6 +4,8 @@
     var screening = ViewBag.Screening as PRN222_CinemaManagement.Models.Entities.Screening;
     var concessionItems = ViewBag.ConcessionItems as List<PRN222_CinemaManagement.Models.Entities.ConcessionItem> ?? new();
     var rows = Model.GroupBy(s => s.Seat.RowLabel).OrderBy(g => g.Key).ToList();
+    int? holdingBookingId = ViewBag.HoldingBookingId as int?;
+    DateTime? holdingExpiresAt = ViewBag.HoldingExpiresAt as DateTime?;
 }
 
 <div class="container my-4">
@@ -15,8 +17,18 @@
             </a>
             <h3 class="text-primary mb-0"><i class="bi bi-cart4"></i> Bán vé & Bắp nước tại quầy</h3>
         </div>
-        <div class="text-end">
-            <span class="badge bg-secondary">Kênh: Quầy thu ngân (Counter)</span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-secondary">Kênh: Quầy thu ngân</span>
+            @* Đồng hồ đếm ngược giữ ghế 5 phút *@
+            <div class="badge bg-dark fs-6 px-3 py-2 border border-warning" id="countdownContainer" style="@(holdingExpiresAt != null ? "display: inline-flex;" : "display: none;")">
+                <i class="bi bi-stopwatch text-warning me-1"></i> Giữ ghế: <span id="countdownTimer" class="font-monospace text-warning fw-bold">05:00</span>
+            </div>
+            <span id="signalrStatusBadge" class="badge bg-light text-muted border">
+                <i class="bi bi-broadcast"></i> Đang kết nối trực tiếp...
+            </span>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.location.reload()" title="Tải lại sơ đồ ghế mới nhất">
+                <i class="bi bi-arrow-clockwise"></i> Tải lại sơ đồ
+            </button>
         </div>
     </div>
 
@@ -38,15 +50,22 @@
             <div class="card-body bg-light">
                 <div class="row align-items-center">
                     <div class="col-md-5">
-                        <h4 class="text-primary fw-bold mb-1">@screening.Movie.Title</h4>
-                        <span class="badge bg-info text-dark me-2">@screening.Movie.DurationMinutes phút</span>
-                        <span class="badge bg-warning text-dark me-2">Độ tuổi: @screening.Movie.AgeRating</span>
-                        <span class="badge bg-dark">Phòng: @screening.Auditorium.Name</span>
+                        <span class="badge bg-primary mb-1">Mã suất: #@screening.ScreeningId</span>
+                        @if (screening.Movie.Status == "Upcoming")
+                        {
+                            <span class="badge bg-warning text-dark mb-1"><i class="bi bi-stars"></i> Vé sớm (Presale)</span>
+                        }
+                        <h4 class="fw-bold text-dark mb-1">@screening.Movie.Title</h4>
+                        <small class="text-muted">
+                            Thời lượng: @screening.Movie.DurationMinutes phút | Giới hạn: @screening.Movie.AgeRating
+                        </small>
                     </div>
                     <div class="col-md-4">
-                        <div class="text-muted small">Thời gian chiếu:</div>
-                        <div class="fw-bold fs-5 text-dark">
-                            @vnStart.ToString("HH:mm") - @vnEnd.ToString("HH:mm")
+                        <div class="fw-semibold text-secondary">
+                            <i class="bi bi-geo-alt-fill text-danger"></i> @screening.Auditorium.Name
+                        </div>
+                        <div class="fw-bold text-dark">
+                            <i class="bi bi-clock-fill text-primary"></i> @vnStart.ToString("HH:mm") - @vnEnd.ToString("HH:mm")
                         </div>
                         <small class="text-muted">Ngày: @vnStart.ToString("dd/MM/yyyy")</small>
                     </div>
@@ -63,6 +82,7 @@
         @Html.AntiForgeryToken()
         <input type="hidden" name="formToken" value="@ViewBag.FormToken" />
         <input type="hidden" name="screeningId" value="@(screening?.ScreeningId ?? 0)" />
+        <input type="hidden" name="holdingBookingId" id="holdingBookingIdInput" value="@(holdingBookingId?.ToString() ?? "")" />
 
         <div class="row g-4">
             @* Cột trái: Sơ đồ ghế + Danh sách bắp nước *@
@@ -73,23 +93,31 @@
                         <div class="d-flex flex-wrap gap-3 justify-content-center small">
                             <div class="d-flex align-items-center">
                                 <span class="d-inline-block border rounded me-1 text-center" style="width: 26px; height: 26px; background-color: #fff; line-height: 24px;">✓</span>
-                                <span>Trống (Có thể bán)</span>
+                                <span>Thường</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="d-inline-block border border-warning rounded me-1 text-center text-warning fw-bold" style="width: 26px; height: 26px; background-color: #fff; line-height: 24px; font-size: 9px;">VIP</span>
+                                <span>VIP</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="d-inline-block border border-danger rounded me-1 text-center text-danger fw-bold" style="width: 36px; height: 26px; background-color: #fff; line-height: 24px; font-size: 9px;">ĐÔI</span>
+                                <span>Ghế đôi</span>
                             </div>
                             <div class="d-flex align-items-center">
                                 <span class="d-inline-block rounded me-1 text-center text-white" style="width: 26px; height: 26px; background-color: #198754; line-height: 26px;">✓</span>
                                 <span>Đang chọn</span>
                             </div>
                             <div class="d-flex align-items-center">
-                                <span class="d-inline-block rounded me-1 text-center text-white" style="width: 26px; height: 26px; background-color: #dc3545; line-height: 26px;">✕</span>
-                                <span>Đã bán (Sold)</span>
+                                <span class="d-inline-block rounded me-1 text-center text-dark" style="width: 26px; height: 26px; background-color: #ffc107; line-height: 26px;">⏳</span>
+                                <span>Giữ online (5p)</span>
                             </div>
                             <div class="d-flex align-items-center">
-                                <span class="d-inline-block rounded me-1 text-center text-dark" style="width: 26px; height: 26px; background-color: #ffc107; line-height: 26px;">⏳</span>
-                                <span>Giữ online (Held)</span>
+                                <span class="d-inline-block rounded me-1 text-center text-white" style="width: 26px; height: 26px; background-color: #dc3545; line-height: 26px;">✕</span>
+                                <span>Đã bán</span>
                             </div>
                             <div class="d-flex align-items-center">
                                 <span class="d-inline-block rounded me-1 text-center text-white" style="width: 26px; height: 26px; background-color: #6c757d; line-height: 26px;">⊘</span>
-                                <span>Khóa (Blocked)</span>
+                                <span>Khóa bảo trì</span>
                             </div>
                         </div>
                     </div>
@@ -103,52 +131,80 @@
                         </div>
 
                         @* Ma trận ghế *@
-                        <div class="seat-matrix text-center py-2 overflow-auto">
+                        <div class="seat-matrix text-center py-2 overflow-auto" id="seatMatrixContainer">
                             @foreach (var rowGroup in rows)
                             {
-                                <div class="d-flex justify-content-center align-items-center mb-2 gap-1">
-                                    <span class="fw-bold me-2" style="width: 24px;">@rowGroup.Key</span>
+                                <div class="d-flex justify-content-center align-items-center mb-2 gap-1 seat-row" data-row="@rowGroup.Key">
+                                    <span class="fw-bold me-2 text-muted" style="width: 24px;">@rowGroup.Key</span>
 
                                     @foreach (var ss in rowGroup.OrderBy(s => s.Seat.SeatNumber))
                                     {
                                         string seatCode = $"{ss.Seat.RowLabel}{ss.Seat.SeatNumber}";
-                                        bool isAvailable = ss.Status == "Available" && ss.Seat.Status == "Active";
+                                        string typeName = ss.Seat.SeatType.TypeName;
+                                        bool isCouple = typeName.Equals("Couple", StringComparison.OrdinalIgnoreCase);
+                                        bool isVip = typeName.Equals("VIP", StringComparison.OrdinalIgnoreCase);
+                                        string widthStyle = isCouple ? "68px" : "36px";
+                                        bool isHeldByThisBooking = (holdingBookingId.HasValue
+                                            && ss.Status == PRN222_CinemaManagement.Constants.BookingConstants.ScreeningSeatStatuses.Held
+                                            && ss.HeldByBookingId == holdingBookingId.Value);
+                                        bool isAvailable = ss.Status == "Available" || isHeldByThisBooking;
 
-                                        if (isAvailable)
-                                        {
-                                            @* Ghế trống: Checkbox chọn ghế *@
-                                            <label class="seat-label position-relative p-0 m-0" title="@seatCode (@ss.Seat.SeatType.TypeName) - @ss.Price.ToString("N0") đ">
-                                                <input type="checkbox" name="seatIds" value="@ss.ScreeningSeatId"
-                                                       data-price="@ss.Price" data-code="@seatCode"
-                                                       class="seat-checkbox d-none" />
-                                                <span class="seat-btn btn btn-outline-primary btn-sm p-0 d-flex align-items-center justify-content-center"
-                                                      style="width: 34px; height: 34px; font-size: 11px; font-weight: 600;">
-                                                    @ss.Seat.SeatNumber
-                                                </span>
-                                            </label>
-                                        }
-                                        else
-                                        {
-                                            @* Ghế không khả dụng *@
-                                            string bgClass = ss.Status switch
+                                        <div id="seat-cell-@ss.ScreeningSeatId" class="d-inline-block">
+                                            @if (isAvailable)
                                             {
-                                                "Sold" => "bg-danger text-white border-danger",
-                                                "Held" => "bg-warning text-dark border-warning",
-                                                _ => "bg-secondary text-white border-secondary"
-                                            };
-                                            string statusText = ss.Status switch
+                                                @* Ghế trống hoặc do chính quầy này đang giữ: Checkbox chọn ghế *@
+                                                <label class="seat-label position-relative p-0 m-0"
+                                                       data-seat-id="@ss.ScreeningSeatId"
+                                                       title="@seatCode (@typeName) - @ss.Price.ToString("N0") đ">
+                                                    <input type="checkbox" name="seatIds" value="@ss.ScreeningSeatId"
+                                                           data-price="@ss.Price" data-code="@seatCode"
+                                                           class="seat-checkbox d-none"
+                                                           @(isHeldByThisBooking ? "checked=\"checked\"" : "") />
+                                                    <span class="seat-btn btn @(isVip ? "btn-outline-warning text-dark border-warning" : (isCouple ? "btn-outline-danger border-danger" : "btn-outline-primary")) btn-sm p-0 d-flex flex-column align-items-center justify-content-center"
+                                                          style="width: @widthStyle; height: 34px; font-size: 11px; font-weight: 600;">
+                                                        <span>@ss.Seat.SeatNumber</span>
+                                                        @if (isCouple)
+                                                        {
+                                                            <small class="d-block text-danger fw-bold" style="font-size: 7px; line-height: 7px;">ĐÔI</small>
+                                                        }
+                                                        else if (isVip)
+                                                        {
+                                                            <small class="d-block text-warning fw-bold" style="font-size: 7px; line-height: 7px;">VIP</small>
+                                                        }
+                                                    </span>
+                                                </label>
+                                            }
+                                            else
                                             {
-                                                "Sold" => "Đã bán",
-                                                "Held" => "Đang giữ online",
-                                                _ => "Bị khóa"
-                                            };
+                                                @* Ghế không khả dụng *@
+                                                string bgClass = ss.Status switch
+                                                {
+                                                    "Sold" => "bg-danger text-white border-danger",
+                                                    "Held" => "bg-warning text-dark border-warning",
+                                                    _ => "bg-secondary text-white border-secondary"
+                                                };
+                                                string statusText = ss.Status switch
+                                                {
+                                                    "Sold" => "Đã bán",
+                                                    "Held" => "Đang giữ online (5p)",
+                                                    _ => "Khóa bảo trì"
+                                                };
 
-                                            <button type="button" disabled class="btn btn-sm p-0 @bgClass"
-                                                    style="width: 34px; height: 34px; font-size: 11px; opacity: 0.85;"
-                                                    title="@seatCode: @statusText">
-                                                @ss.Seat.SeatNumber
-                                            </button>
-                                        }
+                                                <button type="button" disabled class="btn btn-sm p-0 @bgClass d-flex flex-column align-items-center justify-content-center"
+                                                        style="width: @widthStyle; height: 34px; font-size: 11px; opacity: 0.85;"
+                                                        title="@seatCode (@typeName): @statusText">
+                                                    <span>@ss.Seat.SeatNumber</span>
+                                                    @if (isCouple)
+                                                    {
+                                                        <small class="d-block text-dark fw-bold" style="font-size: 7px; line-height: 7px;">ĐÔI</small>
+                                                    }
+                                                    else if (isVip)
+                                                    {
+                                                        <small class="d-block text-dark fw-bold" style="font-size: 7px; line-height: 7px;">VIP</small>
+                                                    }
+                                                </button>
+                                            }
+                                        </div>
                                     }
 
                                     <span class="fw-bold ms-2 text-muted" style="width: 24px;">@rowGroup.Key</span>
@@ -204,6 +260,7 @@
                                                            data-price="@item.Price"
                                                            data-name="@item.Name"
                                                            data-index="@i"
+                                                           data-max="@item.StockQuantity"
                                                            value="0" min="0" max="@item.StockQuantity" />
                                                 </td>
                                                 <td class="text-end fw-bold text-dark" id="concession-subtotal-@i">
@@ -297,98 +354,401 @@
     }
 </style>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const checkboxes = document.querySelectorAll('.seat-checkbox');
-        const emptyNotice = document.getElementById('emptySeatNotice');
-        const badgesContainer = document.getElementById('selectedBadges');
-        const totalQtyDisplay = document.getElementById('totalQtyDisplay');
-        const ticketTotalDisplay = document.getElementById('ticketTotalDisplay');
-        const concessionTotalDisplay = document.getElementById('concessionTotalDisplay');
-        const grandTotalDisplay = document.getElementById('grandTotalDisplay');
-        const submitBtn = document.getElementById('submitSellBtn');
-        const confirmCheck = document.getElementById('confirmCashCheck');
-        const sellForm = document.getElementById('sellForm');
-        const concessionInputs = document.querySelectorAll('.concession-qty-input');
+@section Scripts {
+    <script src="~/lib/signalr/signalr.min.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const emptyNotice = document.getElementById('emptySeatNotice');
+            const badgesContainer = document.getElementById('selectedBadges');
+            const totalQtyDisplay = document.getElementById('totalQtyDisplay');
+            const ticketTotalDisplay = document.getElementById('ticketTotalDisplay');
+            const concessionTotalDisplay = document.getElementById('concessionTotalDisplay');
+            const grandTotalDisplay = document.getElementById('grandTotalDisplay');
+            const submitBtn = document.getElementById('submitSellBtn');
+            const confirmCheck = document.getElementById('confirmCashCheck');
+            const sellForm = document.getElementById('sellForm');
+            const concessionInputs = document.querySelectorAll('.concession-qty-input');
+            const countdownContainer = document.getElementById('countdownContainer');
+            const countdownTimer = document.getElementById('countdownTimer');
+            const holdingBookingIdInput = document.getElementById('holdingBookingIdInput');
 
-        function updateAllTotals() {
-            // 1. Tính tiền vé
-            let ticketTotal = 0;
-            let ticketCount = 0;
-            badgesContainer.innerHTML = '';
+            const screeningId = @(screening?.ScreeningId ?? 0);
+            const hubUrl = '@(ViewBag.HubUrl ?? "/hubs/seats")';
+            const statusBadge = document.getElementById('signalrStatusBadge');
 
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    ticketCount++;
-                    const price = parseFloat(cb.getAttribute('data-price')) || 0;
-                    const code = cb.getAttribute('data-code');
-                    ticketTotal += price;
+            let currentBookingId = @(holdingBookingId != null ? holdingBookingId.Value.ToString() : "null");
+            let expiresAt = @(holdingExpiresAt != null ? $"new Date('{(DateTime)holdingExpiresAt.Value:O}')" : "null");
+            let isHolding = false;
 
-                    const badge = document.createElement('span');
-                    badge.className = 'badge bg-success p-2';
-                    badge.textContent = code + ' (' + price.toLocaleString('vi-VN') + ' đ)';
-                    badgesContainer.appendChild(badge);
-                }
-            });
-
-            if (ticketCount > 0) {
-                emptyNotice.style.display = 'none';
-            } else {
-                emptyNotice.style.display = 'inline';
+            function getCsrfToken() {
+                const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                return tokenInput ? tokenInput.value : '';
             }
 
-            totalQtyDisplay.textContent = ticketCount + ' vé';
-            ticketTotalDisplay.textContent = ticketTotal.toLocaleString('vi-VN') + ' đ';
+            function updateAllTotals() {
+                // 1. Tính tiền vé
+                let ticketTotal = 0;
+                let ticketCount = 0;
+                badgesContainer.innerHTML = '';
 
-            // 2. Tính tiền bắp nước
-            let concessionTotal = 0;
-            concessionInputs.forEach(input => {
-                const qty = parseInt(input.value) || 0;
-                const price = parseFloat(input.getAttribute('data-price')) || 0;
-                const idx = input.getAttribute('data-index');
-                const subtotal = qty * price;
-                concessionTotal += subtotal;
+                const currentCheckboxes = document.querySelectorAll('.seat-checkbox');
+                currentCheckboxes.forEach(cb => {
+                    if (cb.checked) {
+                        ticketCount++;
+                        const price = parseFloat(cb.getAttribute('data-price')) || 0;
+                        const code = cb.getAttribute('data-code');
+                        ticketTotal += price;
 
-                const subtotalCell = document.getElementById('concession-subtotal-' + idx);
-                if (subtotalCell) {
-                    subtotalCell.textContent = subtotal.toLocaleString('vi-VN') + ' đ';
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-success p-2';
+                        badge.textContent = code + ' (' + price.toLocaleString('vi-VN') + ' đ)';
+                        badgesContainer.appendChild(badge);
+                    }
+                });
+
+                if (ticketCount > 0) {
+                    emptyNotice.style.display = 'none';
+                } else {
+                    emptyNotice.style.display = 'inline';
                 }
-            });
 
-            concessionTotalDisplay.textContent = concessionTotal.toLocaleString('vi-VN') + ' đ';
+                totalQtyDisplay.textContent = ticketCount + ' vé';
+                ticketTotalDisplay.textContent = ticketTotal.toLocaleString('vi-VN') + ' đ';
 
-            // 3. Tổng thanh toán
-            const grandTotal = ticketTotal + concessionTotal;
-            grandTotalDisplay.textContent = grandTotal.toLocaleString('vi-VN') + ' đ';
+                // 2. Tính tiền bắp nước
+                let concessionTotal = 0;
+                concessionInputs.forEach(input => {
+                    const qty = parseInt(input.value) || 0;
+                    const price = parseFloat(input.getAttribute('data-price')) || 0;
+                    const idx = input.getAttribute('data-index');
+                    const subtotal = qty * price;
+                    concessionTotal += subtotal;
 
-            // 4. Kiểm tra nút submit (bắt buộc phải có ít nhất 1 vé và đã tick xác nhận)
-            submitBtn.disabled = !(ticketCount > 0 && confirmCheck.checked);
-        }
+                    const subtotalCell = document.getElementById('concession-subtotal-' + idx);
+                    if (subtotalCell) {
+                        subtotalCell.textContent = subtotal.toLocaleString('vi-VN') + ' đ';
+                    }
+                });
 
-        checkboxes.forEach(cb => {
-            cb.addEventListener('change', updateAllTotals);
-        });
+                concessionTotalDisplay.textContent = concessionTotal.toLocaleString('vi-VN') + ' đ';
 
-        concessionInputs.forEach(input => {
-            input.addEventListener('input', function () {
-                const max = parseInt(this.getAttribute('data-max')) || 0;
-                let val = parseInt(this.value) || 0;
-                if (val < 0) this.value = 0;
-                if (val > max) this.value = max;
-                updateAllTotals();
-            });
-        });
+                // 3. Tổng thanh toán
+                const grandTotal = ticketTotal + concessionTotal;
+                grandTotalDisplay.textContent = grandTotal.toLocaleString('vi-VN') + ' đ';
 
-        confirmCheck.addEventListener('change', updateAllTotals);
+                // 4. Kiểm tra nút submit (bắt buộc phải có ít nhất 1 vé và đã tick xác nhận)
+                submitBtn.disabled = !(ticketCount > 0 && confirmCheck.checked && !isHolding);
+            }
 
-        // Chống gửi trùng khi bấm thanh toán nhiều lần
-        sellForm.addEventListener('submit', function (e) {
-            if (submitBtn.disabled) {
+            // -------------------------------------------------------------
+            // CƠ CHẾ GIỮ GHẾ 5 PHÚT TẠI SERVER (TÁI SỬ DỤNG LOGIC BÁCH)
+            // -------------------------------------------------------------
+            async function holdSeatsOnServer(seatIds) {
+                if (isHolding) return false;
+                isHolding = true;
+                submitBtn.disabled = true;
+
+                try {
+                    const response = await fetch('/CounterTicket/HoldSeats', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': getCsrfToken()
+                        },
+                        body: JSON.stringify({
+                            screeningId: screeningId,
+                            bookingId: currentBookingId,
+                            screeningSeatIds: seatIds
+                        })
+                    });
+
+                    if (!response.ok) {
+                        let errMsg = 'Không thể giữ ghế trên server.';
+                        try {
+                            const errData = await response.json();
+                            if (errData && errData.message) errMsg = errData.message;
+                        } catch { }
+                        throw new Error(errMsg);
+                    }
+
+                    const data = await response.json();
+                    if (data && data.bookingId) {
+                        currentBookingId = data.bookingId;
+                        holdingBookingIdInput.value = data.bookingId;
+                    } else if (seatIds.length === 0) {
+                        currentBookingId = null;
+                        holdingBookingIdInput.value = '';
+                    }
+
+                    if (data && data.expiresAt) {
+                        expiresAt = new Date(data.expiresAt);
+                        countdownContainer.style.display = 'inline-flex';
+                    } else {
+                        expiresAt = null;
+                        countdownContainer.style.display = 'none';
+                    }
+
+                    return true;
+                } catch (err) {
+                    alert('LỖI GIỮ GHẾ: ' + err.message);
+                    await refreshSeatSnapshot();
+                    return false;
+                } finally {
+                    isHolding = false;
+                    updateAllTotals();
+                }
+            }
+
+            // Xử lý sự kiện click chọn / bỏ chọn ghế
+            function handleSeatClick(e) {
                 e.preventDefault();
-                return false;
+                if (isHolding) return;
+
+                const label = this;
+                const checkbox = label.querySelector('.seat-checkbox');
+                if (!checkbox) return;
+
+                const seatId = parseInt(checkbox.value);
+                const wasChecked = checkbox.checked;
+
+                // Tập hợp danh sách ghế hiện tại
+                const currentlyCheckedIds = [];
+                document.querySelectorAll('.seat-checkbox').forEach(cb => {
+                    if (cb.checked) currentlyCheckedIds.push(parseInt(cb.value));
+                });
+
+                let targetIds;
+                if (wasChecked) {
+                    targetIds = currentlyCheckedIds.filter(id => id !== seatId);
+                } else {
+                    if (currentlyCheckedIds.length >= 20) {
+                        alert('Mỗi lần giao dịch tối đa chọn 20 ghế.');
+                        return;
+                    }
+                    targetIds = [...currentlyCheckedIds, seatId];
+                }
+
+                // Cập nhật trạng thái tạm thời trên UI (optimistic)
+                checkbox.checked = !wasChecked;
+                updateAllTotals();
+
+                // Gọi server giữ ghế, nếu thất bại thì rollback
+                holdSeatsOnServer(targetIds).then(success => {
+                    if (!success) {
+                        checkbox.checked = wasChecked;
+                        updateAllTotals();
+                    }
+                });
             }
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý giao dịch...';
+
+            function attachSeatListeners() {
+                document.querySelectorAll('.seat-label').forEach(label => {
+                    label.removeEventListener('click', handleSeatClick);
+                    label.addEventListener('click', handleSeatClick);
+                });
+            }
+
+            attachSeatListeners();
+            updateAllTotals();
+
+            // Đồng hồ đếm ngược 5 phút
+            window.setInterval(function () {
+                if (expiresAt && currentBookingId) {
+                    const now = new Date();
+                    const diffSec = Math.max(0, Math.floor((expiresAt - now) / 1000));
+                    const mins = String(Math.floor(diffSec / 60)).padStart(2, '0');
+                    const secs = String(diffSec % 60).padStart(2, '0');
+                    countdownTimer.textContent = mins + ':' + secs;
+
+                    if (diffSec === 0) {
+                        const expiredBookingId = currentBookingId;
+                        expiresAt = null;
+                        currentBookingId = null;
+                        holdingBookingIdInput.value = '';
+                        countdownContainer.style.display = 'none';
+                        alert('Đã hết thời gian 5 phút giữ ghế tại quầy. Ghế đã được tự động giải phóng.');
+                        document.querySelectorAll('.seat-checkbox').forEach(cb => { cb.checked = false; });
+                        updateAllTotals();
+
+                        if (expiredBookingId) {
+                            fetch('/CounterTicket/ReleaseSeats', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'RequestVerificationToken': getCsrfToken()
+                                },
+                                body: JSON.stringify({
+                                    screeningId: screeningId,
+                                    bookingId: expiredBookingId,
+                                    screeningSeatIds: []
+                                })
+                            }).finally(() => {
+                                refreshSeatSnapshot();
+                            });
+                        }
+                    }
+                }
+            }, 1000);
+
+            concessionInputs.forEach(input => {
+                input.addEventListener('input', function () {
+                    const max = parseInt(this.getAttribute('data-max')) || 0;
+                    let val = parseInt(this.value) || 0;
+                    if (val < 0) this.value = 0;
+                    if (val > max) this.value = max;
+                    updateAllTotals();
+                });
+            });
+
+            confirmCheck.addEventListener('change', updateAllTotals);
+
+            // Chống gửi trùng khi bấm thanh toán
+            sellForm.addEventListener('submit', function (e) {
+                if (submitBtn.disabled) {
+                    e.preventDefault();
+                    return false;
+                }
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý giao dịch...';
+            });
+
+            // -------------------------------------------------------------
+            // TÍCH HỢP SIGNALR: ĐỒNG BỘ TRẠNG THÁI GHẾ REALTIME VỚI BÁCH
+            // -------------------------------------------------------------
+            async function refreshSeatSnapshot() {
+                if (isHolding) return; // Không can thiệp nếu quầy đang trong quá trình gửi request
+
+                try {
+                    const url = '/CounterTicket/SeatSnapshot?screeningId=' + screeningId +
+                                (currentBookingId ? '&bookingId=' + currentBookingId : '');
+                    const response = await fetch(url);
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    if (!data || !data.seats) return;
+
+                    let lostSeats = [];
+
+                    data.seats.forEach(seat => {
+                        const cell = document.getElementById('seat-cell-' + seat.screeningSeatId);
+                        if (!cell) return;
+
+                        const checkbox = cell.querySelector('.seat-checkbox');
+                        const isCouple = seat.seatType === 'Couple';
+                        const isVip = seat.seatType === 'VIP';
+                        const width = isCouple ? '68px' : '36px';
+
+                        // Ghế do chính quầy này đang giữ (IsMine từ server)
+                        const isHeldByMe = (seat.isMine === true);
+
+                        if (seat.status === 'Available' || isHeldByMe) {
+                            if (!checkbox) {
+                                const badgeText = isCouple
+                                    ? '<small class="d-block text-danger fw-bold" style="font-size:7px;line-height:7px;">ĐÔI</small>'
+                                    : (isVip ? '<small class="d-block text-warning fw-bold" style="font-size:7px;line-height:7px;">VIP</small>' : '');
+                                const borderClass = isVip ? 'btn-outline-warning text-dark border-warning' : (isCouple ? 'btn-outline-danger border-danger' : 'btn-outline-primary');
+
+                                cell.innerHTML = `
+                                    <label class="seat-label position-relative p-0 m-0"
+                                           data-seat-id="${seat.screeningSeatId}"
+                                           title="${seat.rowLabel}${seat.seatNumber} (${seat.seatType}) - ${seat.price.toLocaleString('vi-VN')} đ">
+                                        <input type="checkbox" name="seatIds" value="${seat.screeningSeatId}"
+                                               data-price="${seat.price}" data-code="${seat.rowLabel}${seat.seatNumber}"
+                                               class="seat-checkbox d-none" />
+                                        <span class="seat-btn btn ${borderClass} btn-sm p-0 d-flex flex-column align-items-center justify-content-center"
+                                              style="width: ${width}; height: 34px; font-size: 11px; font-weight: 600;">
+                                            <span>${seat.seatNumber}</span>
+                                            ${badgeText}
+                                        </span>
+                                    </label>`;
+                            }
+
+                            // Đảm bảo ghế do quầy đang giữ thì checkbox luôn được checked
+                            const currentCb = cell.querySelector('.seat-checkbox');
+                            if (currentCb && isHeldByMe) {
+                                currentCb.checked = true;
+                            }
+                        } else {
+                            // Ghế đã bán (Sold) hoặc người khác giữ (Held) hoặc khóa (Blocked)
+                            if (checkbox && checkbox.checked) {
+                                checkbox.checked = false;
+                                lostSeats.push(seat.rowLabel + seat.seatNumber);
+                            }
+
+                            const bgClass = seat.status === 'Sold' ? 'bg-danger text-white border-danger' :
+                                            (seat.status === 'Held' ? 'bg-warning text-dark border-warning' : 'bg-secondary text-white border-secondary');
+                            const statusText = seat.status === 'Sold' ? 'Đã bán' :
+                                               (seat.status === 'Held' ? 'Đang giữ online (5p)' : 'Khóa bảo trì');
+                            const badgeText = isCouple
+                                ? '<small class="d-block text-dark fw-bold" style="font-size:7px;line-height:7px;">ĐÔI</small>'
+                                : (isVip ? '<small class="d-block text-dark fw-bold" style="font-size:7px;line-height:7px;">VIP</small>' : '');
+
+                            cell.innerHTML = `
+                                <button type="button" disabled class="btn btn-sm p-0 ${bgClass} d-flex flex-column align-items-center justify-content-center"
+                                        style="width: ${width}; height: 34px; font-size: 11px; opacity: 0.85;"
+                                        title="${seat.rowLabel}${seat.seatNumber} (${seat.seatType}): ${statusText}">
+                                    <span>${seat.seatNumber}</span>
+                                    ${badgeText}
+                                </button>`;
+                        }
+                    });
+
+                    attachSeatListeners();
+                    updateAllTotals();
+
+                    if (lostSeats.length > 0) {
+                        alert('Chú ý: Ghế ' + lostSeats.join(', ') + ' vừa được khách hàng khác giữ hoặc mua online!');
+                    }
+                } catch (e) {
+                    console.warn("Lỗi cập nhật sơ đồ ghế realtime:", e);
+                }
+            }
+
+            if (window.signalR && screeningId > 0) {
+                const connection = new signalR.HubConnectionBuilder()
+                    .withUrl(hubUrl)
+                    .withAutomaticReconnect()
+                    .build();
+
+                connection.on("SeatStatusChanged", function (data) {
+                    if (!data || data.screeningId === screeningId) {
+                        refreshSeatSnapshot();
+                    }
+                });
+
+                connection.onreconnecting(() => {
+                    if (statusBadge) {
+                        statusBadge.className = "badge bg-warning text-dark border";
+                        statusBadge.innerHTML = '<i class="bi bi-arrow-repeat"></i> Đang kết nối lại...';
+                    }
+                });
+
+                connection.onreconnected(async () => {
+                    if (statusBadge) {
+                        statusBadge.className = "badge bg-success text-white border";
+                        statusBadge.innerHTML = '<i class="bi bi-broadcast"></i> Cập nhật trực tiếp';
+                    }
+                    try {
+                        await connection.invoke("JoinScreening", screeningId);
+                        refreshSeatSnapshot();
+                    } catch (e) {
+                        console.warn(e);
+                    }
+                });
+
+                connection.start().then(async () => {
+                    await connection.invoke("JoinScreening", screeningId);
+                    if (statusBadge) {
+                        statusBadge.className = "badge bg-success text-white border";
+                        statusBadge.innerHTML = '<i class="bi bi-broadcast"></i> Cập nhật trực tiếp';
+                    }
+                }).catch(err => {
+                    console.warn("SignalR connection failed:", err);
+                    if (statusBadge) {
+                        statusBadge.className = "badge bg-secondary text-white border";
+                        statusBadge.innerHTML = '<i class="bi bi-clock"></i> Cập nhật định kỳ';
+                    }
+                });
+            }
         });
-    });
-</script>
+    </script>
+}

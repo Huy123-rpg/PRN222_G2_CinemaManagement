@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using PRN222_CinemaManagement.Constants;
 using PRN222_CinemaManagement.Data;
 using PRN222_CinemaManagement.Models.Entities;
 using PRN222_CinemaManagement.Repositories.IRepositories;
+using PRN222_CinemaManagement.ViewModels;
 
 namespace PRN222_CinemaManagement.Repositories.ImpleRepositories;
 
@@ -11,24 +13,53 @@ namespace PRN222_CinemaManagement.Repositories.ImpleRepositories;
 /// </summary>
 public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketRepository
 {
-    public Task<List<Movie>> GetShowingMoviesAsync() =>
-        db.Movies
-            .AsNoTracking()
-            .Where(m => m.Status == "Showing")
-            .OrderBy(m => m.Title)
-            .ToListAsync();
+    public Task<List<Movie>> GetShowingMoviesAsync(string? statusFilter = null)
+    {
+        var query = db.Movies.AsNoTracking();
 
-    public Task<List<Screening>> GetAvailableScreeningsAsync(int? movieId)
+        if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Showing, StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(m => m.Status == BookingConstants.MovieStatuses.Showing);
+        }
+        else if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Upcoming, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(statusFilter, "Presale", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(m => m.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
+        else
+        {
+            query = query.Where(m => m.Status == BookingConstants.MovieStatuses.Showing
+                                  || m.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
+
+        return query.OrderBy(m => m.Title).ToListAsync();
+    }
+
+    public Task<List<Screening>> GetAvailableScreeningsAsync(int? movieId, string? statusFilter = null)
     {
         var now = DateTime.UtcNow;
         var query = db.Screenings
             .AsNoTracking()
             .Include(s => s.Movie)
             .Include(s => s.Auditorium)
-            .Where(s => s.Status == "Scheduled"
+            .Where(s => s.Status == BookingConstants.ScreeningStatuses.Scheduled
                      && s.StartAt > now
-                     && s.Movie.Status == "Showing"
-                     && s.Auditorium.Status == "Active");
+                     && s.Auditorium.Status == BookingConstants.AuditoriumStatuses.Active);
+
+        if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Showing, StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => s.Movie.Status == BookingConstants.MovieStatuses.Showing);
+        }
+        else if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Upcoming, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(statusFilter, "Presale", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => s.Movie.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
+        else
+        {
+            query = query.Where(s => s.Movie.Status == BookingConstants.MovieStatuses.Showing
+                                  || s.Movie.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
 
         if (movieId.HasValue && movieId.Value > 0)
         {
@@ -38,17 +69,32 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
         return query.OrderBy(s => s.StartAt).ToListAsync();
     }
 
-    public async Task<(List<Screening> Items, int TotalCount)> GetAvailableScreeningsPagedAsync(int? movieId, int page, int pageSize)
+    public async Task<(List<Screening> Items, int TotalCount)> GetAvailableScreeningsPagedAsync(
+        int? movieId, int page, int pageSize, string? statusFilter = null)
     {
         var now = DateTime.UtcNow;
         var query = db.Screenings
             .AsNoTracking()
             .Include(s => s.Movie)
             .Include(s => s.Auditorium)
-            .Where(s => s.Status == "Scheduled"
+            .Where(s => s.Status == BookingConstants.ScreeningStatuses.Scheduled
                      && s.StartAt > now
-                     && s.Movie.Status == "Showing"
-                     && s.Auditorium.Status == "Active");
+                     && s.Auditorium.Status == BookingConstants.AuditoriumStatuses.Active);
+
+        if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Showing, StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => s.Movie.Status == BookingConstants.MovieStatuses.Showing);
+        }
+        else if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Upcoming, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(statusFilter, "Presale", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => s.Movie.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
+        else
+        {
+            query = query.Where(s => s.Movie.Status == BookingConstants.MovieStatuses.Showing
+                                  || s.Movie.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
 
         if (movieId.HasValue && movieId.Value > 0)
         {
@@ -77,14 +123,36 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
             .Include(s => s.Auditorium)
             .FirstOrDefaultAsync(s => s.ScreeningId == screeningId);
 
-    public Task<List<ScreeningSeat>> GetScreeningSeatsAsync(int screeningId) =>
-        db.ScreeningSeats
+    public async Task<List<ScreeningSeat>> GetScreeningSeatsAsync(int screeningId)
+    {
+        var now = DateTime.UtcNow;
+        var seats = await db.ScreeningSeats
             .AsNoTracking()
             .Include(ss => ss.Seat).ThenInclude(s => s.SeatType)
             .Where(ss => ss.ScreeningId == screeningId)
             .OrderBy(ss => ss.Seat.RowLabel)
             .ThenBy(ss => ss.Seat.SeatNumber)
             .ToListAsync();
+
+        // Chuẩn hóa trạng thái đồng bộ hoàn toàn với module của Ánh và Bách:
+        foreach (var ss in seats)
+        {
+            if (ss.Status != BookingConstants.ScreeningSeatStatuses.Sold)
+            {
+                if (ss.Seat.Status != BookingConstants.PhysicalSeatStatuses.Active || !ss.Seat.SeatType.IsActive)
+                {
+                    ss.Status = BookingConstants.ScreeningSeatStatuses.Blocked;
+                }
+                else if (ss.Status == BookingConstants.ScreeningSeatStatuses.Held && ss.HoldExpiresAt <= now)
+                {
+                    // Ghế giữ online quá 5 phút đã hết hạn -> tự động hiển thị Available để quầy bán được
+                    ss.Status = BookingConstants.ScreeningSeatStatuses.Available;
+                }
+            }
+        }
+
+        return seats;
+    }
 
     public Task<List<ScreeningSeat>> GetSeatsForSaleAsync(int screeningId, IEnumerable<int> seatIds) =>
         db.ScreeningSeats
@@ -101,6 +169,14 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
 
     public Task<Staff?> GetStaffByUserIdAsync(int userId) =>
         db.Staffs.FirstOrDefaultAsync(s => s.UserId == userId);
+
+    public Task<Booking?> GetActivePendingCounterBookingAsync(int bookingId) =>
+        db.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.BookingId == bookingId
+                && b.BookingChannel == BookingConstants.Channels.Counter
+                && b.Status == BookingConstants.BookingStatuses.Pending
+                && b.ExpiresAt > DateTime.UtcNow);
 
     public async Task<CounterReceiptResult?> GetReceiptAsync(int bookingId)
     {
@@ -129,25 +205,219 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
         return new CounterReceiptResult(booking, concessionSale);
     }
 
+    public async Task<HoldResultViewModel> HoldCounterSeatsAsync(
+        int staffId,
+        int screeningId,
+        int? bookingId,
+        int[] seatIds,
+        CancellationToken ct = default)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var now = DateTime.UtcNow;
+            now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerSecond));
+
+            var screening = await db.Screenings
+                .Include(s => s.Auditorium)
+                .FirstOrDefaultAsync(s => s.ScreeningId == screeningId, ct);
+
+            if (screening == null || screening.Status != BookingConstants.ScreeningStatuses.Scheduled || screening.StartAt <= now)
+            {
+                throw new InvalidOperationException("Suất chiếu không khả dụng hoặc đã qua giờ chiếu.");
+            }
+
+            Booking booking;
+            if (bookingId.HasValue && bookingId.Value > 0)
+            {
+                var existingBooking = await db.Bookings
+                    .FirstOrDefaultAsync(b => b.BookingId == bookingId.Value
+                        && b.ScreeningId == screeningId
+                        && b.StaffId == staffId
+                        && b.BookingChannel == BookingConstants.Channels.Counter
+                        && b.Status == BookingConstants.BookingStatuses.Pending, ct);
+
+                if (existingBooking == null)
+                {
+                    throw new InvalidOperationException("Phiên giữ ghế không tồn tại hoặc đã hết hạn.");
+                }
+
+                booking = existingBooking;
+
+                if (booking.ExpiresAt <= now)
+                {
+                    throw new InvalidOperationException("Thời gian 5 phút giữ ghế đã hết hạn. Vui lòng chọn lại.");
+                }
+            }
+            else
+            {
+                if (seatIds.Length == 0)
+                {
+                    return new HoldResultViewModel { ServerNow = now };
+                }
+
+                var expiresAt = now.AddMinutes(BookingConstants.HoldDurationMinutes);
+                if (expiresAt > screening.StartAt) expiresAt = screening.StartAt;
+                if (expiresAt <= now)
+                {
+                    throw new InvalidOperationException("Suất chiếu đã bắt đầu.");
+                }
+
+                booking = new Booking
+                {
+                    BookingCode = "CT-HOLD-" + Guid.NewGuid().ToString("N")[..8].ToUpper(),
+                    CustomerId = null,
+                    StaffId = staffId,
+                    ScreeningId = screeningId,
+                    BookingDate = now,
+                    ExpiresAt = expiresAt,
+                    BookingChannel = BookingConstants.Channels.Counter,
+                    Status = BookingConstants.BookingStatuses.Pending,
+                    TotalAmount = 0
+                };
+                db.Bookings.Add(booking);
+                await db.SaveChangesAsync(ct);
+            }
+
+            if (seatIds.Length == 0)
+            {
+                // Nhả tất cả ghế của đơn này
+                await db.ScreeningSeats
+                    .Where(s => s.HeldByBookingId == booking.BookingId && s.Status == BookingConstants.ScreeningSeatStatuses.Held)
+                    .ExecuteUpdateAsync(setter => setter
+                        .SetProperty(s => s.Status, BookingConstants.ScreeningSeatStatuses.Available)
+                        .SetProperty(s => s.HeldByBookingId, (int?)null)
+                        .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
+
+                booking.Status = BookingConstants.BookingStatuses.Cancelled;
+                await db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+
+                return new HoldResultViewModel { ServerNow = now };
+            }
+
+            var selectedSeats = await db.ScreeningSeats
+                .Include(ss => ss.Seat).ThenInclude(s => s.SeatType)
+                .Where(ss => seatIds.Contains(ss.ScreeningSeatId) && ss.ScreeningId == screeningId)
+                .OrderBy(ss => ss.ScreeningSeatId)
+                .ToListAsync(ct);
+
+            if (selectedSeats.Count != seatIds.Length ||
+                selectedSeats.Any(s => s.Seat.Status != BookingConstants.PhysicalSeatStatuses.Active || !s.Seat.SeatType.IsActive))
+            {
+                throw new InvalidOperationException("Có ghế không hợp lệ hoặc đang bảo trì.");
+            }
+
+            // Giữ ghế tuần tự theo ID tăng dần chống deadlock
+            foreach (var seat in selectedSeats)
+            {
+                var updated = await db.ScreeningSeats
+                    .Where(s => s.ScreeningSeatId == seat.ScreeningSeatId
+                        && s.Seat.Status == BookingConstants.PhysicalSeatStatuses.Active
+                        && s.Seat.SeatType.IsActive
+                        && (s.Status == BookingConstants.ScreeningSeatStatuses.Available
+                            || (s.Status == BookingConstants.ScreeningSeatStatuses.Held
+                                && (s.HoldExpiresAt <= now || s.HeldByBookingId == booking.BookingId))))
+                    .ExecuteUpdateAsync(setter => setter
+                        .SetProperty(s => s.Status, BookingConstants.ScreeningSeatStatuses.Held)
+                        .SetProperty(s => s.HeldByBookingId, (int?)booking.BookingId)
+                        .SetProperty(s => s.HoldExpiresAt, (DateTime?)booking.ExpiresAt), ct);
+
+                if (updated != 1)
+                {
+                    throw new InvalidOperationException($"Ghế {seat.Seat.RowLabel}{seat.Seat.SeatNumber} vừa được người khác giữ hoặc mua.");
+                }
+            }
+
+            // Nhả các ghế Staff vừa bỏ chọn
+            await db.ScreeningSeats
+                .Where(s => s.HeldByBookingId == booking.BookingId
+                    && s.Status == BookingConstants.ScreeningSeatStatuses.Held
+                    && !seatIds.Contains(s.ScreeningSeatId))
+                .ExecuteUpdateAsync(setter => setter
+                    .SetProperty(s => s.Status, BookingConstants.ScreeningSeatStatuses.Available)
+                    .SetProperty(s => s.HeldByBookingId, (int?)null)
+                    .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
+
+            booking.TotalAmount = selectedSeats.Sum(s => s.Price);
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return new HoldResultViewModel
+            {
+                BookingId = booking.BookingId,
+                ExpiresAt = booking.ExpiresAt,
+                ServerNow = now,
+                TotalAmount = booking.TotalAmount
+            };
+        }
+        catch
+        {
+            await transaction.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task ReleaseCounterSeatsAsync(int staffId, int bookingId, CancellationToken ct = default)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var booking = await db.Bookings
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId
+                    && b.StaffId == staffId
+                    && b.BookingChannel == BookingConstants.Channels.Counter
+                    && b.Status == BookingConstants.BookingStatuses.Pending, ct);
+
+            if (booking != null)
+            {
+                await db.ScreeningSeats
+                    .Where(s => s.HeldByBookingId == booking.BookingId && s.Status == BookingConstants.ScreeningSeatStatuses.Held)
+                    .ExecuteUpdateAsync(setter => setter
+                        .SetProperty(s => s.Status, BookingConstants.ScreeningSeatStatuses.Available)
+                        .SetProperty(s => s.HeldByBookingId, (int?)null)
+                        .SetProperty(s => s.HoldExpiresAt, (DateTime?)null), ct);
+
+                booking.Status = BookingConstants.BookingStatuses.Cancelled;
+                await db.SaveChangesAsync(ct);
+            }
+
+            await transaction.CommitAsync(ct);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<CounterSaleResult> ExecuteCounterSaleTransactionAsync(
         int screeningId,
         List<int> seatIds,
         List<CounterConcessionOrder>? concessionOrders,
         int staffId,
         decimal ticketTotal,
-        string paymentMethod)
+        string paymentMethod,
+        int? holdingBookingId = null)
     {
         await using var transaction = await db.Database.BeginTransactionAsync();
         try
         {
-            // 1. Cập nhật nguyên tử trạng thái ghế từ Available -> Sold
+            var now = DateTime.UtcNow;
+
+            // 1. Cập nhật nguyên tử trạng thái ghế từ Available hoặc Held -> Sold
             // Ràng buộc CK_ScreeningSeats_HeldState yêu cầu HeldByBookingId và HoldExpiresAt phải là NULL khi Status != 'Held'
             var updatedRows = await db.ScreeningSeats
                 .Where(ss => seatIds.Contains(ss.ScreeningSeatId)
                           && ss.ScreeningId == screeningId
-                          && ss.Status == "Available")
+                          && ss.Seat.Status == BookingConstants.PhysicalSeatStatuses.Active
+                          && ss.Seat.SeatType.IsActive
+                          && (ss.Status == BookingConstants.ScreeningSeatStatuses.Available
+                              || (ss.Status == BookingConstants.ScreeningSeatStatuses.Held
+                                  && (ss.HoldExpiresAt <= now
+                                      || (holdingBookingId.HasValue && ss.HeldByBookingId == holdingBookingId.Value)))))
                 .ExecuteUpdateAsync(setter => setter
-                    .SetProperty(s => s.Status, "Sold")
+                    .SetProperty(s => s.Status, BookingConstants.ScreeningSeatStatuses.Sold)
                     .SetProperty(s => s.HeldByBookingId, (int?)null)
                     .SetProperty(s => s.HoldExpiresAt, (DateTime?)null));
 
@@ -157,23 +427,59 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
                     "Giao dịch không thành công: một trong các ghế bạn chọn vừa được mua hoặc giữ bởi người khác. Vui lòng chọn ghế khác.");
             }
 
-            var now = DateTime.UtcNow;
-
-            // 2. Tạo hóa đơn vé (Booking)
-            var booking = new Booking
+            // 2. Tạo hoặc cập nhật hóa đơn vé (Booking)
+            Booking booking;
+            if (holdingBookingId.HasValue && holdingBookingId.Value > 0)
             {
-                BookingCode = "CT-" + Guid.NewGuid().ToString("N")[..8].ToUpper(),
-                CustomerId = null, // Khách mua trực tiếp tại quầy
-                StaffId = staffId,
-                ScreeningId = screeningId,
-                BookingDate = now,
-                ExpiresAt = now.AddDays(1),
-                TotalAmount = ticketTotal,
-                BookingChannel = "Counter",
-                Status = "Confirmed"
-            };
-            db.Bookings.Add(booking);
-            await db.SaveChangesAsync(); // Sinh BookingId
+                var existing = await db.Bookings
+                    .FirstOrDefaultAsync(b => b.BookingId == holdingBookingId.Value
+                        && b.StaffId == staffId
+                        && b.BookingChannel == BookingConstants.Channels.Counter
+                        && b.Status == BookingConstants.BookingStatuses.Pending);
+
+                if (existing != null)
+                {
+                    existing.BookingCode = "CT-" + Guid.NewGuid().ToString("N")[..8].ToUpper();
+                    existing.TotalAmount = ticketTotal;
+                    existing.Status = BookingConstants.BookingStatuses.Confirmed;
+                    existing.ExpiresAt = now.AddDays(1);
+                    booking = existing;
+                }
+                else
+                {
+                    booking = new Booking
+                    {
+                        BookingCode = "CT-" + Guid.NewGuid().ToString("N")[..8].ToUpper(),
+                        CustomerId = null,
+                        StaffId = staffId,
+                        ScreeningId = screeningId,
+                        BookingDate = now,
+                        ExpiresAt = now.AddDays(1),
+                        TotalAmount = ticketTotal,
+                        BookingChannel = BookingConstants.Channels.Counter,
+                        Status = BookingConstants.BookingStatuses.Confirmed
+                    };
+                    db.Bookings.Add(booking);
+                }
+            }
+            else
+            {
+                booking = new Booking
+                {
+                    BookingCode = "CT-" + Guid.NewGuid().ToString("N")[..8].ToUpper(),
+                    CustomerId = null,
+                    StaffId = staffId,
+                    ScreeningId = screeningId,
+                    BookingDate = now,
+                    ExpiresAt = now.AddDays(1),
+                    TotalAmount = ticketTotal,
+                    BookingChannel = BookingConstants.Channels.Counter,
+                    Status = BookingConstants.BookingStatuses.Confirmed
+                };
+                db.Bookings.Add(booking);
+            }
+
+            await db.SaveChangesAsync(); // Sinh BookingId hoặc lưu cập nhật
 
             // 3. Tạo vé cho từng ghế
             var dbSeats = await db.ScreeningSeats
