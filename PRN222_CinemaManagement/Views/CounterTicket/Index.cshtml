@@ -1,0 +1,161 @@
+@model IEnumerable<PRN222_CinemaManagement.Models.Entities.Screening>
+@{
+    ViewData["Title"] = "Bán vé tại quầy (UC-13)";
+    var movies = ViewBag.Movies as List<PRN222_CinemaManagement.Models.Entities.Movie> ?? new();
+    int? selectedMovieId = ViewBag.SelectedMovieId as int?;
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int totalPages = ViewBag.TotalPages ?? 1;
+    int totalItems = ViewBag.TotalItems ?? 0;
+    int pageSize = ViewBag.PageSize ?? 10;
+}
+
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="text-primary mb-1"><i class="bi bi-ticket-perforated"></i> Bán vé tại quầy (Counter Ticket Sales)</h2>
+            <p class="text-muted mb-0">Chọn suất chiếu để thực hiện bán vé trực tiếp cho khách hàng vãng lai tại quầy.</p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-clockwise"></i> Tải lại danh sách
+        </a>
+    </div>
+
+    @* Thông báo thành công / lỗi *@
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @* Bộ lọc theo Phim *@
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" asp-action="Index" class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <label class="form-label fw-bold mb-1">Lọc theo phim đang chiếu:</label>
+                    <select name="movieId" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Tất cả phim đang chiếu --</option>
+                        @foreach (var m in movies)
+                        {
+                            if (selectedMovieId == m.MovieId)
+                            {
+                                <option value="@m.MovieId" selected>@m.Title (@m.DurationMinutes phút - @m.AgeRating)</option>
+                            }
+                            else
+                            {
+                                <option value="@m.MovieId">@m.Title (@m.DurationMinutes phút - @m.AgeRating)</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-7 text-md-end pt-md-4">
+                    <span class="badge bg-info text-dark p-2">
+                        <i class="bi bi-info-circle"></i> Chỉ hiển thị các suất chiếu có trạng thái <strong>Scheduled</strong> sắp tới
+                    </span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Bảng danh sách suất chiếu *@
+    <div class="card shadow-sm">
+        <div class="card-header bg-light fw-bold">
+            <i class="bi bi-calendar3"></i> Danh sách suất chiếu khả dụng
+        </div>
+        <div class="card-body p-0">
+            @if (!Model.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-camera-reels display-4"></i>
+                    <p class="mt-3 mb-1 fw-bold">Hiện chưa có suất chiếu nào khả dụng để bán vé.</p>
+                    <small>Vui lòng kiểm tra lại trạng thái phim (Showing) và lịch chiếu (Scheduled) trong hệ thống.</small>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã</th>
+                                <th>Tên phim</th>
+                                <th>Phòng chiếu</th>
+                                <th>Thời gian chiếu (Giờ VN)</th>
+                                <th>Giá cơ bản</th>
+                                <th class="text-center">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sc in Model)
+                            {
+                                var vnStart = sc.StartAt.ToLocalTime();
+                                var vnEnd = sc.EndAt.ToLocalTime();
+                                <tr>
+                                    <td><span class="badge bg-secondary">#@sc.ScreeningId</span></td>
+                                    <td>
+                                        <div class="fw-bold text-primary">@sc.Movie.Title</div>
+                                        <small class="text-muted">@sc.Movie.DurationMinutes phút | Độ tuổi: @sc.Movie.AgeRating</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-dark">@sc.Auditorium.Name</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@vnStart.ToString("HH:mm") - @vnEnd.ToString("HH:mm")</div>
+                                        <small class="text-muted">@vnStart.ToString("dd/MM/yyyy")</small>
+                                    </td>
+                                    <td class="fw-bold text-success">
+                                        @sc.BasePrice.ToString("N0") đ
+                                    </td>
+                                    <td class="text-center">
+                                        <a asp-action="SelectSeats" asp-route-screeningId="@sc.ScreeningId" 
+                                           class="btn btn-primary btn-sm px-3">
+                                            <i class="bi bi-grid-3x3-gap"></i> Chọn ghế & Bán vé
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (totalPages > 1)
+                {
+                    <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 d-print-none">
+                        <div class="text-muted small">
+                            Hiển thị @((currentPage - 1) * pageSize + 1) - @(Math.Min(currentPage * pageSize, totalItems)) trên tổng số @totalItems suất chiếu
+                        </div>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-movieId="@selectedMovieId" asp-route-page="@(currentPage - 1)">Trước</a>
+                            </li>
+                            @for (int p = 1; p <= totalPages; p++)
+                            {
+                                <li class="page-item @(p == currentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Index" asp-route-movieId="@selectedMovieId" asp-route-page="@p">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-movieId="@selectedMovieId" asp-route-page="@(currentPage + 1)">Sau</a>
+                            </li>
+                        </ul>
+                    </div>
+                }
+                else if (totalItems > 0)
+                {
+                    <div class="card-footer bg-white text-muted small py-2 d-print-none">
+                        Tổng số: @totalItems suất chiếu
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>

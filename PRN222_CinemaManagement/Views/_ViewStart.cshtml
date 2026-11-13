@@ -4,7 +4,10 @@
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
     var action = ViewContext.RouteData.Values["action"]?.ToString();
     var isOperationsRole = role is "Staff" or "CinemaManager" or "Admin";
-    var operationsControllers = new[] { "Dashboard", "Screening", "Auditorium", "Pricing", "Employee" };
+    var operationsControllers = new[] { 
+        "Dashboard", "Screening", "Auditorium", "Pricing", "Employee", 
+        "CounterTicket", "Concession", "RevenueReport" 
+    };
     var isTicketOperations = controller == "Ticket" && action != "MyBookings" && isOperationsRole;
     var isMovieManagement = controller == "Movie" && role is "CinemaManager" or "Admin";
     Layout = isOperationsRole && (operationsControllers.Contains(controller) || isTicketOperations || isMovieManagement)

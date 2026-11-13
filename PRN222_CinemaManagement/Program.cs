@@ -25,6 +25,13 @@ builder.Services.AddScoped<IScreeningScheduleService, ScreeningScheduleService>(
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<IMovieService, MovieService>();
 builder.Services.AddSingleton<IMoviePosterStorage, MoviePosterStorage>();
+
+builder.Services.AddScoped<IConcessionRepository, ConcessionRepository>();
+builder.Services.AddScoped<IConcessionService, ConcessionService>();
+builder.Services.AddScoped<ICounterTicketRepository, CounterTicketRepository>();
+builder.Services.AddScoped<ICounterTicketService, CounterTicketService>();
+builder.Services.AddScoped<IRevenueReportRepository, RevenueReportRepository>();
+builder.Services.AddScoped<IRevenueReportService, RevenueReportService>();
 builder.Services.AddHttpContextAccessor();
 
 // ===== Module đặt vé online: Repository, Service và Worker nền =====

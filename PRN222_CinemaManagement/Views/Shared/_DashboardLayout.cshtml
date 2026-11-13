@@ -32,11 +32,14 @@
                 <a class="operations-nav-link @(controller == "Dashboard" ? "active" : "")" aria-current="@(controller == "Dashboard" ? "page" : null)" asp-controller="Dashboard" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">⌂</span>Dashboard</a>
                 @if (role is "Staff" or "CinemaManager" or "Admin")
                 {
+                    <a class="operations-nav-link @(controller == "CounterTicket" ? "active" : "")" aria-current="@(controller == "CounterTicket" ? "page" : null)" asp-controller="CounterTicket" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">🎟</span>Bán vé tại quầy</a>
+                    <a class="operations-nav-link @(controller == "Concession" ? "active" : "")" aria-current="@(controller == "Concession" ? "page" : null)" asp-controller="Concession" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">🍿</span>Bán bắp nước</a>
                     <a class="operations-nav-link @(controller == "Ticket" ? "active" : "")" aria-current="@(controller == "Ticket" ? "page" : null)" asp-controller="Ticket" asp-action="StaffLookup"><span class="operations-nav-icon" aria-hidden="true">▣</span>Tra cứu & soát vé</a>
                 }
                 @if (role is "CinemaManager" or "Admin")
                 {
                     <p class="operations-sidebar-label operations-sidebar-spaced">QUẢN LÝ RẠP</p>
+                    <a class="operations-nav-link @(controller == "RevenueReport" ? "active" : "")" aria-current="@(controller == "RevenueReport" ? "page" : null)" asp-controller="RevenueReport" asp-action="Daily"><span class="operations-nav-icon" aria-hidden="true">📊</span>Báo cáo doanh thu</a>
                     <a class="operations-nav-link @(controller == "Screening" ? "active" : "")" aria-current="@(controller == "Screening" ? "page" : null)" asp-controller="Screening" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">▦</span>Lịch chiếu</a>
                     <a class="operations-nav-link @(controller == "Movie" ? "active" : "")" aria-current="@(controller == "Movie" ? "page" : null)" asp-controller="Movie" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">▤</span>Phim</a>
                     <a class="operations-nav-link @(controller == "Auditorium" ? "active" : "")" aria-current="@(controller == "Auditorium" ? "page" : null)" asp-controller="Auditorium" asp-action="Index"><span class="operations-nav-icon" aria-hidden="true">▥</span>Phòng chiếu</a>
