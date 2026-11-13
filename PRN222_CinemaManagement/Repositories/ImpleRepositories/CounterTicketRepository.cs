@@ -580,4 +580,136 @@ public class CounterTicketRepository(CinemaDbContext db) : ICounterTicketReposit
             throw;
         }
     }
+
+    public async Task<(List<Movie> Items, int TotalCount, int ShowingCount, int UpcomingCount)> GetCounterCatalogMoviesPagedAsync(
+        string? search, string? statusFilter, int page, int pageSize)
+    {
+        var now = DateTime.UtcNow;
+        var baseQuery = db.Movies.AsNoTracking()
+            .Where(m => (m.Status == BookingConstants.MovieStatuses.Showing || m.Status == BookingConstants.MovieStatuses.Upcoming)
+                     && m.Screenings.Any(s => s.Status == BookingConstants.ScreeningStatuses.Scheduled
+                                          && s.StartAt > now
+                                          && s.Auditorium.Status == BookingConstants.AuditoriumStatuses.Active));
+
+        int showingCount = await baseQuery.CountAsync(m => m.Status == BookingConstants.MovieStatuses.Showing);
+        int upcomingCount = await baseQuery.CountAsync(m => m.Status == BookingConstants.MovieStatuses.Upcoming);
+
+        var filteredQuery = baseQuery;
+
+        if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Showing, StringComparison.OrdinalIgnoreCase))
+        {
+            filteredQuery = filteredQuery.Where(m => m.Status == BookingConstants.MovieStatuses.Showing);
+        }
+        else if (string.Equals(statusFilter, BookingConstants.MovieStatuses.Upcoming, StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(statusFilter, "Presale", StringComparison.OrdinalIgnoreCase))
+        {
+            filteredQuery = filteredQuery.Where(m => m.Status == BookingConstants.MovieStatuses.Upcoming);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            string term = search.Trim().ToLower();
+            filteredQuery = filteredQuery.Where(m => m.Title.ToLower().Contains(term)
+                                                  || (m.Description != null && m.Description.ToLower().Contains(term)));
+        }
+
+        int totalCount = await filteredQuery.CountAsync();
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var items = await filteredQuery
+            .Include(m => m.MovieGenres).ThenInclude(mg => mg.Genre)
+            .Include(m => m.Screenings.Where(s => s.Status == BookingConstants.ScreeningStatuses.Scheduled
+                                              && s.StartAt > now
+                                              && s.Auditorium.Status == BookingConstants.AuditoriumStatuses.Active))
+            .OrderBy(m => m.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount, showingCount, upcomingCount);
+    }
+
+    public async Task<Movie?> GetMovieWithScreeningsForCounterAsync(int movieId, DateOnly? showDate)
+    {
+        var now = DateTime.UtcNow;
+        var movie = await db.Movies.AsNoTracking()
+            .Include(m => m.MovieGenres).ThenInclude(mg => mg.Genre)
+            .Include(m => m.Screenings.Where(s => s.Status == BookingConstants.ScreeningStatuses.Scheduled
+                                              && s.StartAt > now
+                                              && s.Auditorium.Status == BookingConstants.AuditoriumStatuses.Active))
+                .ThenInclude(s => s.Auditorium)
+            .FirstOrDefaultAsync(m => m.MovieId == movieId);
+
+        if (movie == null) return null;
+
+        if (showDate.HasValue)
+        {
+            movie.Screenings = movie.Screenings
+                .Where(s => DateOnly.FromDateTime(s.StartAt.AddHours(BookingConstants.VietnamUtcOffsetHours)) == showDate.Value)
+                .OrderBy(s => s.StartAt)
+                .ToList();
+        }
+        else
+        {
+            movie.Screenings = movie.Screenings
+                .OrderBy(s => s.StartAt)
+                .ToList();
+        }
+
+        return movie;
+    }
+
+    public async Task<(List<Booking> Items, int TotalCount, decimal TotalRevenue)> GetCounterSalesHistoryPagedAsync(
+        int staffId, string? searchCode, DateTime? utcFrom, DateTime? utcTo, int page, int pageSize)
+    {
+        var query = db.Bookings.AsNoTracking()
+            .Include(b => b.Payments)
+            .Include(b => b.Tickets).ThenInclude(t => t.ScreeningSeat).ThenInclude(ss => ss.Seat)
+            .Include(b => b.Screening).ThenInclude(sc => sc.Movie)
+            .Include(b => b.Screening).ThenInclude(sc => sc.Auditorium)
+            .Where(b => b.BookingChannel == BookingConstants.Channels.Counter
+                     && b.StaffId == staffId
+                     && b.Payments.Any(p => p.PaymentStatus == BookingConstants.PaymentOutcomes.Success));
+
+        if (!string.IsNullOrWhiteSpace(searchCode))
+        {
+            string codeTerm = searchCode.Trim().ToLower();
+            query = query.Where(b => b.BookingCode.ToLower().Contains(codeTerm));
+        }
+
+        if (utcFrom.HasValue)
+        {
+            query = query.Where(b => b.BookingDate >= utcFrom.Value);
+        }
+
+        if (utcTo.HasValue)
+        {
+            query = query.Where(b => b.BookingDate < utcTo.Value);
+        }
+
+        decimal totalRevenue = await query.SumAsync(b => b.TotalAmount);
+        int totalCount = await query.CountAsync();
+
+        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        if (page < 1) page = 1;
+        if (page > totalPages && totalPages > 0) page = totalPages;
+
+        var items = await query
+            .OrderByDescending(b => b.BookingDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount, totalRevenue);
+    }
+
+    public Task<ConcessionSale?> GetConcessionSaleByBookingCodeAsync(string bookingCode)
+    {
+        string linkedCode = "CS-" + bookingCode;
+        return db.ConcessionSales.AsNoTracking()
+            .Include(cs => cs.ConcessionSaleItems).ThenInclude(csi => csi.ConcessionItem)
+            .FirstOrDefaultAsync(cs => cs.SaleCode == linkedCode);
+    }
 }

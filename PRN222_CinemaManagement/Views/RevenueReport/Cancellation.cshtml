@@ -8,7 +8,9 @@
     int totalBookings = ViewBag.TotalBookings ?? 0;
     int totalTickets = ViewBag.TotalCancelledTickets ?? 0;
     decimal totalVal = ViewBag.TotalCancelledValue ?? 0m;
+    decimal totalObligation = ViewBag.TotalRefundObligation ?? 0m;
     decimal totalRefund = ViewBag.TotalRefunded ?? 0m;
+    decimal totalPending = ViewBag.TotalRefundPending ?? 0m;
     int currentPage = ViewBag.CurrentPage ?? 1;
     int totalPages = ViewBag.TotalPages ?? 1;
     int totalItems = ViewBag.TotalItems ?? Model.Count();
@@ -24,6 +26,7 @@
                 <a asp-action="Shift" class="btn btn-outline-primary">Báo cáo theo ca (UC-29)</a>
                 <a asp-action="Cancellation" class="btn btn-primary active">Báo cáo hủy vé (UC-30)</a>
                 <a asp-action="Reconciliation" asp-route-date="@fromDate" class="btn btn-outline-primary">Đối soát doanh thu (TEC-08)</a>
+                <a asp-controller="Ticket" asp-action="RefundQueue" class="btn btn-outline-warning">Quầy hoàn tiền</a>
             </div>
             <h3 class="text-primary mb-0">Báo cáo hủy vé & hoàn tiền</h3>
         </div>
@@ -48,8 +51,8 @@
                     <label class="form-label mb-0 small fw-semibold">Trạng thái đơn:</label>
                     <select name="statusFilter" class="form-select form-select-sm">
                         <option value="All" selected="@(statusFilter == "All")">-- Tất cả trạng thái hủy/hoàn --</option>
-                        <option value="Cancelled" selected="@(statusFilter == "Cancelled")">Đã hủy (Cancelled)</option>
-                        <option value="Refunded" selected="@(statusFilter == "Refunded")">Đã hoàn tiền (Refunded)</option>
+                        <option value="Cancelled" selected="@(statusFilter == "Cancelled")">Đang chờ hoàn tiền (Cancelled)</option>
+                        <option value="Refunded" selected="@(statusFilter == "Refunded")">Đã hoàn tiền xong (Refunded)</option>
                     </select>
                 </div>
                 <div class="col-md-3 d-flex gap-2">
@@ -66,31 +69,45 @@
         <div>
             <strong>Lưu ý về dữ liệu:</strong> Cơ sở dữ liệu hiện tại <em>chưa có cột thời điểm hủy (CancelledAt)</em> hoặc <em>thời điểm hoàn tiền (RefundedAt)</em>.
             Báo cáo đang thống kê các đơn có phát sinh trạng thái hủy/hoàn theo <strong>Ngày đặt vé ban đầu (BookingDate)</strong>.
-            Hệ thống phân biệt rõ giữa <em>giá trị đơn bị hủy</em> và <em>tiền thực tế đã hoàn trả</em>.
+            Hệ thống phân biệt rõ giữa <em>Số tiền phát sinh phải hoàn (RefundDue)</em> và <em>Tiền thực tế đã chi trả tại quầy (RefundAmount)</em>.
         </div>
     </div>
 
-    @* 3 Thẻ KPI chính *@
-    <div class="row g-3 mb-3">
-        <div class="col-md-4">
-            <div class="card shadow-sm border-danger h-100 p-3">
-                <div class="text-muted small">Số đơn bị hủy / hoàn:</div>
-                <h4 class="text-danger fw-bold my-1">@totalBookings đơn</h4>
-                <div class="small text-muted">Tổng số vé bị hủy: <strong>@totalTickets</strong> vé</div>
+    @* 5 Thẻ KPI chính *@
+    <div class="row g-2 mb-3">
+        <div class="col">
+            <div class="card shadow-sm border-danger h-100 p-2">
+                <div class="text-muted small" style="font-size: 0.75rem;">1. Số đơn hủy / hoàn:</div>
+                <h5 class="text-danger fw-bold my-1">@totalBookings đơn</h5>
+                <div class="text-muted" style="font-size: 0.7rem;">Tổng: <strong>@totalTickets</strong> vé hủy</div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-secondary h-100 p-3">
-                <div class="text-muted small">Tổng giá trị đơn hủy:</div>
-                <h4 class="text-secondary fw-bold my-1">@totalVal.ToString("N0") đ</h4>
-                <div class="small text-muted">Giá trị ban đầu của các đơn hủy</div>
+        <div class="col">
+            <div class="card shadow-sm border-secondary h-100 p-2">
+                <div class="text-muted small" style="font-size: 0.75rem;">2. Tổng giá trị đơn hủy:</div>
+                <h5 class="text-secondary fw-bold my-1">@totalVal.ToString("N0") đ</h5>
+                <div class="text-muted" style="font-size: 0.7rem;">Giá trị ban đầu của đơn</div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-warning bg-light h-100 p-3">
-                <div class="text-muted small">Tổng tiền thực tế đã hoàn trả:</div>
-                <h4 class="text-warning fw-bold my-1 text-dark">@totalRefund.ToString("N0") đ</h4>
-                <div class="small text-muted">Thống kê từ RefundAmount của Payment</div>
+        <div class="col">
+            <div class="card shadow-sm border-primary h-100 p-2">
+                <div class="text-muted small" style="font-size: 0.75rem;">3. Phát sinh phải hoàn:</div>
+                <h5 class="text-primary fw-bold my-1">@totalObligation.ToString("N0") đ</h5>
+                <div class="text-muted" style="font-size: 0.7rem;">Khách được quyền nhận</div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card shadow-sm border-success h-100 p-2">
+                <div class="text-muted small" style="font-size: 0.75rem;">4. Thực tế đã hoàn trả:</div>
+                <h5 class="text-success fw-bold my-1">@totalRefund.ToString("N0") đ</h5>
+                <div class="text-muted" style="font-size: 0.7rem;">Đã chi trả tại quầy</div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card shadow-sm border-warning bg-light h-100 p-2">
+                <div class="text-muted small" style="font-size: 0.75rem;">5. Đang chờ hoàn tiền:</div>
+                <h5 class="text-warning fw-bold my-1 text-dark">@totalPending.ToString("N0") đ</h5>
+                <div class="text-muted" style="font-size: 0.7rem;">Khách chưa đến lấy</div>
             </div>
         </div>
     </div>
@@ -120,13 +137,18 @@
                             <th class="text-center">Trạng thái</th>
                             <th class="text-center">Vé hủy</th>
                             <th class="text-end">Giá trị đơn</th>
-                            <th class="text-end fw-bold">Tiền hoàn trả</th>
+                            <th class="text-end text-primary">Phải hoàn</th>
+                            <th class="text-end text-success">Đã hoàn</th>
+                            <th class="text-end text-danger fw-bold">Còn chờ</th>
+                            <th class="text-center d-print-none">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var b in Model)
                         {
+                            decimal totalPaid = b.Payments.Where(p => p.PaymentStatus == "Success").Sum(p => p.Amount);
                             decimal refAmt = b.Payments.Sum(p => p.RefundAmount);
+                            decimal pending = b.Status == "Refunded" ? 0m : Math.Max(0m, totalPaid - refAmt);
                             int canTickets = b.Tickets.Count(t => t.Status == "Cancelled" || b.Status == "Cancelled" || b.Status == "Refunded");
                             string actor = b.BookingChannel == "Counter"
                                 ? (b.Staff?.User?.FullName ?? "Staff") + " (" + (b.Staff?.StaffCode ?? "STF") + ")"
@@ -144,11 +166,32 @@
                                 </td>
                                 <td>@actor</td>
                                 <td class="text-center">
-                                    <span class="badge @(b.Status == "Cancelled" ? "bg-danger" : "bg-warning text-dark")">@b.Status</span>
+                                    @if (b.Status == "Refunded" || (totalPaid > 0 && pending == 0))
+                                    {
+                                        <span class="badge bg-success">Đã hoàn tiền</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">Chờ hoàn tiền</span>
+                                    }
                                 </td>
                                 <td class="text-center fw-bold">@canTickets / @b.Tickets.Count</td>
                                 <td class="text-end">@b.TotalAmount.ToString("N0") đ</td>
-                                <td class="text-end fw-bold text-danger">@(refAmt > 0 ? refAmt.ToString("N0") + " đ" : "0 đ")</td>
+                                <td class="text-end text-primary">@totalPaid.ToString("N0") đ</td>
+                                <td class="text-end text-success">@(refAmt > 0 ? refAmt.ToString("N0") + " đ" : "0 đ")</td>
+                                <td class="text-end text-danger fw-bold">@(pending > 0 ? pending.ToString("N0") + " đ" : "0 đ")</td>
+                                <td class="text-center d-print-none">
+                                    @if (pending > 0)
+                                    {
+                                        <a asp-controller="Ticket" asp-action="RefundQueue" asp-route-searchKeyword="@b.BookingCode" class="btn btn-sm btn-outline-warning">
+                                            <i class="bi bi-cash"></i> Chi tiền
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small"><i class="bi bi-check2"></i> Xong</span>
+                                    }
+                                </td>
                             </tr>
                         }
                     </tbody>

@@ -1,0 +1,211 @@
+@model PRN222_CinemaManagement.ViewModels.StaffRefundQueueViewModel
+@{
+    ViewData["Title"] = "Hoàn tiền tại quầy (Staff Cash Refund)";
+    Layout = "_DashboardLayout";
+}
+
+<div class="container-fluid py-2">
+    @* Thanh tiêu đề và điều hướng *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark">
+                <i class="bi bi-cash-stack text-warning me-2"></i>Hoàn tiền tại quầy (Cash Refund)
+            </h3>
+            <p class="text-muted small mb-0">Xử lý chi trả tiền mặt cho khách hàng đã hủy vé hợp lệ theo quy định</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="StaffLookup" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-search me-1"></i> Tra cứu & Soát vé
+            </a>
+            <a asp-controller="RevenueReport" asp-action="Cancellation" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-file-earmark-bar-graph me-1"></i> Báo cáo hủy vé (UC-30)
+            </a>
+        </div>
+    </div>
+
+    @* Hướng dẫn nghiệp vụ hoàn tiền *@
+    <div class="alert alert-light border shadow-sm py-2 mb-3 small d-flex align-items-center">
+        <div class="me-3 fs-3 text-warning">
+            <i class="bi bi-info-circle-fill"></i>
+        </div>
+        <div>
+            <strong>Quy trình chi trả hoàn tiền mặt:</strong>
+            Khách hàng sau khi hủy vé online (hoặc tại quầy) cần đến trực tiếp quầy vé để nhận lại tiền mặt.
+            Nhân viên kiểm tra thông tin, <strong>thực sự trao tiền mặt</strong> cho khách, sau đó bấm <em>"Xác nhận đã trả tiền mặt"</em> để hệ thống ghi nhận <code>RefundAmount</code> và chuyển trạng thái sang <strong>Refunded</strong> (tránh hoàn trùng).
+        </div>
+    </div>
+
+    @* 4 Thẻ KPI thống kê hoàn tiền *@
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card border-warning shadow-sm h-100 p-3 bg-white">
+                <div class="text-muted small fw-semibold">Đơn đang chờ hoàn:</div>
+                <h4 class="text-warning fw-bold my-1">@Model.PendingCount đơn</h4>
+                <div class="small text-muted">Khách chưa đến nhận tiền</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-danger shadow-sm h-100 p-3 bg-white">
+                <div class="text-muted small fw-semibold">Tổng tiền cần hoàn (RefundDue):</div>
+                <h4 class="text-danger fw-bold my-1">@Model.TotalPendingAmount.ToString("N0") đ</h4>
+                <div class="small text-muted">Số tiền mặt rạp phải chi trả</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success shadow-sm h-100 p-3 bg-white">
+                <div class="text-muted small fw-semibold">Đơn đã hoàn tất:</div>
+                <h4 class="text-success fw-bold my-1">@Model.CompletedCount đơn</h4>
+                <div class="small text-muted">Đã trả tiền mặt xong</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-primary shadow-sm h-100 p-3 bg-white">
+                <div class="text-muted small fw-semibold">Tổng tiền thực tế đã hoàn:</div>
+                <h4 class="text-primary fw-bold my-1">@Model.TotalRefundedAmount.ToString("N0") đ</h4>
+                <div class="small text-muted">Đã ghi nhận vào Payment.RefundAmount</div>
+            </div>
+        </div>
+    </div>
+
+    @* Form tìm kiếm & Bộ lọc trạng thái *@
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-2">
+            <form method="get" asp-action="RefundQueue" class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="text" name="searchKeyword" class="form-control" value="@Model.SearchKeyword" placeholder="Tìm theo mã đơn, SĐT, tên khách, mã vé..." />
+                        @if (!string.IsNullOrEmpty(Model.SearchKeyword))
+                        {
+                            <a asp-action="RefundQueue" asp-route-statusFilter="@Model.StatusFilter" class="btn btn-outline-secondary">Xóa tìm</a>
+                        }
+                    </div>
+                </div>
+                <div class="col-md-5 d-flex gap-1">
+                    <span class="small fw-semibold align-self-center me-1">Trạng thái:</span>
+                    <a asp-action="RefundQueue" asp-route-statusFilter="Pending" asp-route-searchKeyword="@Model.SearchKeyword"
+                       class="btn btn-sm @(Model.StatusFilter == "Pending" ? "btn-warning" : "btn-outline-warning")">
+                        Chờ hoàn (@Model.PendingCount)
+                    </a>
+                    <a asp-action="RefundQueue" asp-route-statusFilter="Completed" asp-route-searchKeyword="@Model.SearchKeyword"
+                       class="btn btn-sm @(Model.StatusFilter == "Completed" ? "btn-success" : "btn-outline-success")">
+                        Đã hoàn tất (@Model.CompletedCount)
+                    </a>
+                    <a asp-action="RefundQueue" asp-route-statusFilter="All" asp-route-searchKeyword="@Model.SearchKeyword"
+                       class="btn btn-sm @(Model.StatusFilter == "All" ? "btn-secondary" : "btn-outline-secondary")">
+                        Tất cả
+                    </a>
+                </div>
+                <div class="col-md-2 text-end">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Lọc dữ liệu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Danh sách các đơn hoàn tiền *@
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-2 fw-bold text-dark d-flex justify-content-between align-items-center">
+            <span>Danh sách đơn vé (@Model.Items.Count đơn)</span>
+            <span class="badge bg-light text-dark border">Cập nhật thời gian thực</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0 small">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã đơn</th>
+                        <th>Khách hàng</th>
+                        <th>Phim & Suất chiếu</th>
+                        <th>Ghế hủy</th>
+                        <th class="text-end">Đã thanh toán</th>
+                        <th class="text-end text-danger fw-bold">Cần hoàn (RefundDue)</th>
+                        <th class="text-end text-success">Đã hoàn</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th class="text-center" style="width: 180px;">Hành động thu ngân</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Items.Any())
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                Không có đơn vé nào trong danh sách hoàn tiền phù hợp với điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="font-monospace fw-bold">@item.BookingCode</div>
+                                    <small class="text-muted">@item.BookingDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+                                    <br /><span class="badge bg-secondary" style="font-size: 0.65rem;">@item.BookingChannel</span>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@item.CustomerName</div>
+                                    <small class="text-muted"><i class="bi bi-telephone"></i> @item.CustomerPhone</small>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-primary">@item.MovieTitle</div>
+                                    <small class="text-muted">
+                                        @(item.ScreeningStartAt > DateTime.MinValue ? item.ScreeningStartAt.ToLocalTime().ToString("dd/MM HH:mm") : "")
+                                        | @item.AuditoriumName
+                                    </small>
+                                </td>
+                                <td>
+                                    @foreach (var seat in item.SeatLabels)
+                                    {
+                                        <span class="badge bg-light text-dark border me-1">@seat</span>
+                                    }
+                                </td>
+                                <td class="text-end fw-semibold">@item.TotalPaid.ToString("N0") đ</td>
+                                <td class="text-end text-danger fw-bold" style="font-size: 0.95rem;">
+                                    @(item.RefundDue > 0 ? item.RefundDue.ToString("N0") + " đ" : "0 đ")
+                                </td>
+                                <td class="text-end text-success">
+                                    @(item.RefundPaid > 0 ? item.RefundPaid.ToString("N0") + " đ" : "0 đ")
+                                </td>
+                                <td class="text-center">
+                                    @if (item.Status == "Refunded" || (item.TotalPaid > 0 && item.RefundDue == 0))
+                                    {
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle me-1"></i>Đã hoàn tiền
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock-history me-1"></i>Chờ hoàn tiền mặt
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (item.RefundDue > 0)
+                                    {
+                                        <form asp-action="ConfirmRefund" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="bookingId" value="@item.BookingId" />
+                                            <button type="submit" class="btn btn-danger btn-sm w-100"
+                                                    onclick="return confirm('XÁC NHẬN CHI TIỀN MẶT:\n\nBạn có chắc chắn đã trao số tiền @item.RefundDue.ToString("N0")đ TIỀN MẶT cho khách hàng \'@item.CustomerName\' không?\n\nSau khi xác nhận, đơn sẽ hoàn tất và không thể hoàn lại lần hai.');">
+                                                <i class="bi bi-cash me-1"></i>Trả tiền mặt
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-success w-100" disabled>
+                                            <i class="bi bi-check2-all me-1"></i>Đã chi trả xong
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

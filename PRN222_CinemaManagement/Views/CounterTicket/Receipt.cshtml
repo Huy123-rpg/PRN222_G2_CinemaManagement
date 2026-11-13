@@ -10,24 +10,27 @@
 
 <div class="container my-4">
     @* Thanh công cụ phía trên *@
-    <div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
-        <div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 d-print-none">
+        <div class="d-flex gap-2">
             <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left"></i> Về danh sách suất chiếu
+                <i class="bi bi-film me-1"></i> Danh sách phim
+            </a>
+            <a asp-action="History" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-clock-history me-1"></i> Lịch sử bán vé
             </a>
         </div>
         <div class="d-flex gap-2">
             <button type="button" onclick="window.print(); return false;" class="btn btn-primary">
-                <i class="bi bi-printer"></i> In hóa đơn
+                <i class="bi bi-printer me-1"></i> In hóa đơn
             </button>
             @if (concessionSale != null)
             {
                 <a href="@Url.Action("Receipt", "Concession", new { id = concessionSale.ConcessionSaleId })" target="_blank" class="btn btn-outline-info">
-                    <i class="bi bi-cup-straw"></i> In riêng hóa đơn bắp nước
+                    <i class="bi bi-cup-straw me-1"></i> In riêng hóa đơn bắp nước
                 </a>
             }
             <a asp-action="Index" class="btn btn-success">
-                <i class="bi bi-plus-circle"></i> Bán đơn tiếp theo
+                <i class="bi bi-plus-circle me-1"></i> Bán đơn tiếp theo
             </a>
         </div>
     </div>

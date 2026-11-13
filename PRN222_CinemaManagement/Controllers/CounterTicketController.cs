@@ -23,26 +23,49 @@ public class CounterConcessionInput
 [SessionAuthorize(Roles = "Staff,CinemaManager,Admin")]
 public class CounterTicketController(ICounterTicketService counterTicketService) : Controller
 {
-    // GET: /CounterTicket?statusFilter=All&movieId=1&page=1
-    // Hiển thị danh sách phim đang chiếu / sắp chiếu và các suất chiếu có thể bán vé (phân trang 10 dòng/trang).
+    // GET: /CounterTicket?search=...&statusFilter=All&page=1
+    // Màn hình 1: Danh sách phim dạng thẻ (Movie Catalog cho Staff) với tìm kiếm, lọc Showing / Presale và phân trang.
     [HttpGet]
-    public async Task<IActionResult> Index(string? statusFilter = "All", int? movieId = null, int page = 1)
+    public async Task<IActionResult> Index(string? search, string? statusFilter = "All", int page = 1)
     {
+        const int pageSize = 8;
+        if (page < 1) page = 1;
+
+        var catalog = await counterTicketService.GetCounterMovieCatalogAsync(search, statusFilter, page, pageSize);
+        return View(catalog);
+    }
+
+    // GET: /CounterTicket/Screenings?movieId=5&showDate=2026-11-13
+    // Màn hình 2: Danh sách các suất chiếu sắp tới của phim được chọn kèm bộ lọc ngày chiếu.
+    [HttpGet]
+    public async Task<IActionResult> Screenings(int movieId, string? showDate)
+    {
+        var model = await counterTicketService.GetMovieScreeningsForCounterAsync(movieId, showDate);
+        if (model == null)
+        {
+            TempData["ErrorMessage"] = "Phim không tồn tại hoặc hiện không có suất chiếu khả dụng nào tại rạp.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        return View(model);
+    }
+
+    // GET: /CounterTicket/History?searchCode=...&fromDate=...&toDate=...&page=1
+    // Màn hình Lịch sử bán vé tại quầy của nhân viên đang đăng nhập.
+    [HttpGet]
+    public async Task<IActionResult> History(string? searchCode, string? fromDate, string? toDate, int page = 1)
+    {
+        int? userId = HttpContext.Session.GetInt32("UserId");
+        if (!userId.HasValue)
+        {
+            return RedirectToAction("Login", "Account");
+        }
+
         const int pageSize = 10;
         if (page < 1) page = 1;
 
-        var (screenings, totalCount) = await counterTicketService.GetAvailableScreeningsPagedAsync(movieId, page, pageSize, statusFilter);
-        int totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
-
-        ViewBag.Movies = await counterTicketService.GetShowingMoviesAsync(statusFilter);
-        ViewBag.SelectedMovieId = movieId;
-        ViewBag.StatusFilter = statusFilter ?? "All";
-        ViewBag.CurrentPage = page;
-        ViewBag.TotalPages = totalPages;
-        ViewBag.TotalItems = totalCount;
-        ViewBag.PageSize = pageSize;
-
-        return View(screenings);
+        var history = await counterTicketService.GetCounterSalesHistoryAsync(userId.Value, searchCode, fromDate, toDate, page, pageSize);
+        return View(history);
     }
 
     // GET: /CounterTicket/SelectSeats?screeningId=5
@@ -248,10 +271,25 @@ public class CounterTicketController(ICounterTicketService counterTicketService)
         }
 
         int? effectiveBookingId = bookingId ?? HttpContext.Session.GetInt32($"CounterHoldingBookingId_{screeningId}");
+        DateTime? expiresAt = null;
+        if (effectiveBookingId.HasValue)
+        {
+            var heldBooking = await counterTicketService.GetActivePendingCounterBookingAsync(effectiveBookingId.Value);
+            if (heldBooking != null && heldBooking.ScreeningId == screeningId && heldBooking.ExpiresAt > DateTime.UtcNow)
+            {
+                expiresAt = heldBooking.ExpiresAt;
+            }
+            else
+            {
+                effectiveBookingId = null;
+            }
+        }
 
         var result = new
         {
             screeningId,
+            bookingId = effectiveBookingId,
+            expiresAt,
             serverNow = DateTime.UtcNow,
             seats = seats.Select(s => new
             {

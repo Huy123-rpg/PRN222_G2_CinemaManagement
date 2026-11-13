@@ -6,6 +6,11 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3>Tra cứu đơn vé & Soát vé vào rạp</h3>
+    <div>
+        <a asp-action="RefundQueue" class="btn btn-warning btn-sm">
+            <i class="bi bi-cash-stack me-1"></i> Quản lý hoàn tiền tại quầy
+        </a>
+    </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -114,13 +119,17 @@
                                 {
                                     <span class="badge bg-success">Đã thanh toán</span>
                                 }
+                                else if (b.Status == "Refunded")
+                                {
+                                    <span class="badge bg-info text-dark">Đã hoàn tiền</span>
+                                }
                                 else if (b.Status == "Cancelled")
                                 {
-                                    <span class="badge bg-secondary">Đã hủy</span>
+                                    <span class="badge bg-warning text-dark">Đã hủy (Chờ hoàn)</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-warning text-dark">@b.Status</span>
+                                    <span class="badge bg-secondary">@b.Status</span>
                                 }
                             </td>
                             <td class="text-center">
@@ -128,7 +137,13 @@
                                     Chi tiết & QR
                                 </a>
 
-                                @if (b.Status != "Cancelled")
+                                @if (b.Status == "Cancelled")
+                                {
+                                    <a asp-action="RefundQueue" asp-route-searchKeyword="@b.BookingCode" class="btn btn-sm btn-warning">
+                                        <i class="bi bi-cash"></i> Hoàn tiền
+                                    </a>
+                                }
+                                else if (b.Status != "Cancelled" && b.Status != "Refunded")
                                 {
                                     <form asp-action="StaffCancelBooking" method="post" class="d-inline">
                                         @Html.AntiForgeryToken()

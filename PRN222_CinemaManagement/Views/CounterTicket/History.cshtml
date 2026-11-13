@@ -1,0 +1,244 @@
+@model PRN222_CinemaManagement.ViewModels.CounterSalesHistoryViewModel
+@{
+    ViewData["Title"] = "Lịch sử bán vé tại quầy";
+}
+
+<div class="container-fluid px-0">
+    @* Thanh tiêu đề và điều hướng *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="text-primary fw-bold mb-1">
+                <i class="bi bi-clock-history"></i> Lịch sử bán vé tại quầy
+            </h2>
+            <p class="text-muted mb-0">
+                Nhân viên: <strong>@Model.StaffName</strong> (Mã nhân viên #@Model.StaffId) · Các giao dịch đã bán và hoàn tất thanh toán thành công.
+            </p>
+        </div>
+        <div>
+            <a asp-action="Index" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i> Bán vé mới cho khách
+            </a>
+        </div>
+    </div>
+
+    @* KPI tóm tắt doanh số quầy *@
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm border-0 border-start border-primary border-4">
+                <div class="card-body">
+                    <span class="text-muted small">Tổng số đơn bán vé thành công</span>
+                    <h3 class="fw-bold text-dark my-1">@Model.TotalItems đơn</h3>
+                    <small class="text-muted">Chỉ tính đơn đã hoàn tất thu tiền</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm border-0 border-start border-success border-4">
+                <div class="card-body">
+                    <span class="text-muted small">Tổng doanh thu bán tại quầy</span>
+                    <h3 class="fw-bold text-success my-1">@Model.TotalRevenue.ToString("N0") đ</h3>
+                    <small class="text-muted">Đã bao gồm tiền vé & bắp nước mua kèm</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm border-0 border-start border-info border-4">
+                <div class="card-body">
+                    <span class="text-muted small">Kênh bán hàng</span>
+                    <h3 class="fw-bold text-info my-1">Counter (Tại quầy)</h3>
+                    <small class="text-muted">Bảo mật: Chỉ xem giao dịch của chính bạn</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Form tìm kiếm & lọc khoảng ngày *@
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-3">
+            <form method="get" asp-action="History" class="row g-2 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small fw-semibold text-muted mb-1">Mã đặt vé (Booking Code):</label>
+                    <input type="text" name="searchCode" value="@Model.SearchCode" class="form-control form-control-sm" placeholder="Nhập mã đơn vé, ví dụ: CT-..." />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Từ ngày:</label>
+                    <input type="date" name="fromDate" value="@Model.FromDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1">Đến ngày:</label>
+                    <input type="date" name="toDate" value="@Model.ToDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-12 col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                        <i class="bi bi-funnel me-1"></i> Lọc đơn
+                    </button>
+                    @if (!string.IsNullOrWhiteSpace(Model.SearchCode) || !string.IsNullOrWhiteSpace(Model.FromDate) || !string.IsNullOrWhiteSpace(Model.ToDate))
+                    {
+                        <a asp-action="History" class="btn btn-outline-secondary btn-sm" title="Xóa bộ lọc">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Bảng danh sách giao dịch *@
+    <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-list-check text-primary me-2"></i> Danh sách giao dịch bán vé
+            </h5>
+            <span class="text-muted small">Hiển thị @Model.Items.Count đơn / Tổng @Model.TotalItems đơn</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width: 140px;">Mã đơn</th>
+                        <th style="min-width: 150px;">Thời điểm bán</th>
+                        <th style="min-width: 200px;">Phim & Suất chiếu</th>
+                        <th style="min-width: 130px;">Phòng & Ghế</th>
+                        <th class="text-end" style="min-width: 100px;">Tiền vé</th>
+                        <th class="text-end" style="min-width: 100px;">Bắp nước</th>
+                        <th class="text-end fw-bold" style="min-width: 120px;">Tổng tiền</th>
+                        <th class="text-center" style="min-width: 120px;">Thanh toán</th>
+                        <th class="text-center" style="min-width: 110px;">Trạng thái</th>
+                        <th class="text-center" style="width: 130px;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
+                                Không tìm thấy giao dịch bán vé nào phù hợp với điều kiện tìm kiếm.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="font-monospace fw-bold text-primary">@item.BookingCode</span>
+                                    @if (!string.IsNullOrEmpty(item.ConcessionSaleCode))
+                                    {
+                                        <div><small class="badge bg-light text-muted border">@item.ConcessionSaleCode</small></div>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@item.BookingDate.ToString("dd/MM/yyyy")</div>
+                                    <small class="text-muted">@item.BookingDate.ToString("HH:mm:ss")</small>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@item.MovieTitle</div>
+                                    <small class="text-muted">
+                                        <i class="bi bi-clock me-1"></i>@item.ScreeningStartAt.ToString("HH:mm - dd/MM/yyyy")
+                                    </small>
+                                </td>
+                                <td>
+                                    <div class="fw-bold"><span class="badge bg-dark">@item.AuditoriumName</span></div>
+                                    <div class="mt-1 d-flex flex-wrap gap-1">
+                                        @foreach (var seat in item.Seats)
+                                        {
+                                            <span class="badge bg-light text-dark border" style="font-size: 0.75rem;">@seat</span>
+                                        }
+                                    </div>
+                                    <small class="text-muted">(@item.TicketCount vé)</small>
+                                </td>
+                                <td class="text-end">
+                                    @item.TicketAmount.ToString("N0") đ
+                                </td>
+                                <td class="text-end">
+                                    @(item.ConcessionAmount > 0 ? item.ConcessionAmount.ToString("N0") + " đ" : "-")
+                                </td>
+                                <td class="text-end fw-bold text-danger fs-6">
+                                    @item.TotalAmount.ToString("N0") đ
+                                </td>
+                                <td class="text-center">
+                                    @if (item.PaymentMethod == "Cash")
+                                    {
+                                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                                            <i class="bi bi-cash me-1"></i> Tiền mặt
+                                        </span>
+                                    }
+                                    else if (item.PaymentMethod.Contains("VNPay", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">
+                                            <i class="bi bi-qr-code me-1"></i> VNPay (Giả lập)
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@item.PaymentMethod</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (item.Status == "Confirmed")
+                                    {
+                                        <span class="badge bg-success">Đã bán</span>
+                                    }
+                                    else if (item.Status == "Refunded")
+                                    {
+                                        <span class="badge bg-warning text-dark">Đã hoàn tiền</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">@item.Status</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <a asp-action="Receipt" asp-route-id="@item.BookingId"
+                                       class="btn btn-outline-primary btn-sm px-2 py-1 text-nowrap">
+                                        <i class="bi bi-receipt me-1"></i> Xem hóa đơn
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* Phân trang *@
+        @if (Model.TotalPages > 1)
+        {
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2">
+                <div class="text-muted small">
+                    Trang <strong>@Model.Page</strong> / <strong>@Model.TotalPages</strong>
+                </div>
+                <nav aria-label="Phân trang lịch sử bán vé">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="History"
+                               asp-route-searchCode="@Model.SearchCode"
+                               asp-route-fromDate="@Model.FromDate"
+                               asp-route-toDate="@Model.ToDate"
+                               asp-route-page="@(Model.Page - 1)">&laquo; Trước</a>
+                        </li>
+                        @for (int p = 1; p <= Model.TotalPages; p++)
+                        {
+                            <li class="page-item @(p == Model.Page ? "active" : "")">
+                                <a class="page-link" asp-action="History"
+                                   asp-route-searchCode="@Model.SearchCode"
+                                   asp-route-fromDate="@Model.FromDate"
+                                   asp-route-toDate="@Model.ToDate"
+                                   asp-route-page="@p">@p</a>
+                            </li>
+                        }
+                        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="History"
+                               asp-route-searchCode="@Model.SearchCode"
+                               asp-route-fromDate="@Model.FromDate"
+                               asp-route-toDate="@Model.ToDate"
+                               asp-route-page="@(Model.Page + 1)">Sau &raquo;</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+</div>

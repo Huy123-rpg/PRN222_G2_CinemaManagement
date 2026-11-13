@@ -136,7 +136,9 @@ public class RevenueReportController(IRevenueReportService revenueReportService)
         ViewBag.TotalBookings = result.TotalBookings;
         ViewBag.TotalCancelledTickets = result.TotalCancelledTickets;
         ViewBag.TotalCancelledValue = result.TotalCancelledValue;
+        ViewBag.TotalRefundObligation = result.TotalRefundObligation;
         ViewBag.TotalRefunded = result.TotalRefund;
+        ViewBag.TotalRefundPending = result.TotalRefundPending;
 
         const int pageSize = 10;
         int totalCount = result.Bookings.Count;
