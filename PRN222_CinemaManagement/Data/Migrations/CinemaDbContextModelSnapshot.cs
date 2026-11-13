@@ -351,6 +351,120 @@ namespace PRN222_CinemaManagement.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.ConcessionSale", b =>
+                {
+                    b.Property<int>("ConcessionSaleId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ConcessionSaleId"));
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)")
+                        .HasDefaultValue("Cash");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SaleCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime>("SaleDate")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(0)
+                        .HasColumnType("datetime2(0)")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<int?>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Completed");
+
+                    b.Property<decimal>("TotalAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.HasKey("ConcessionSaleId");
+
+                    b.HasIndex("SaleCode")
+                        .IsUnique();
+
+                    b.HasIndex("SaleDate")
+                        .HasDatabaseName("IX_ConcessionSales_Date");
+
+                    b.HasIndex("StaffId")
+                        .HasDatabaseName("IX_ConcessionSales_Staff");
+
+                    b.ToTable("ConcessionSales", t =>
+                        {
+                            t.HasCheckConstraint("CK_ConcessionSales_Status", "[Status] IN ('Completed','Cancelled')");
+
+                            t.HasCheckConstraint("CK_ConcessionSales_Total", "[TotalAmount] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.ConcessionSaleItem", b =>
+                {
+                    b.Property<int>("ConcessionSaleItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ConcessionSaleItemId"));
+
+                    b.Property<int>("ConcessionItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ConcessionSaleId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Subtotal")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasComputedColumnSql("CONVERT(decimal(18,2), [Quantity] * [UnitPrice])", true);
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("ConcessionSaleItemId");
+
+                    b.HasIndex("ConcessionItemId")
+                        .HasDatabaseName("IX_ConcessionSaleItems_Item");
+
+                    b.HasIndex("ConcessionSaleId", "ConcessionItemId")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_ConcessionSaleItems_Item");
+
+                    b.ToTable("ConcessionSaleItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_ConcessionSaleItems_Quantity", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_ConcessionSaleItems_UnitPrice", "[UnitPrice] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.Customer", b =>
                 {
                     b.Property<int>("CustomerId")
@@ -1158,6 +1272,35 @@ namespace PRN222_CinemaManagement.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.ConcessionSale", b =>
+                {
+                    b.HasOne("PRN222_CinemaManagement.Models.Entities.Staff", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.ConcessionSaleItem", b =>
+                {
+                    b.HasOne("PRN222_CinemaManagement.Models.Entities.ConcessionItem", "ConcessionItem")
+                        .WithMany()
+                        .HasForeignKey("ConcessionItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PRN222_CinemaManagement.Models.Entities.ConcessionSale", "ConcessionSale")
+                        .WithMany("ConcessionSaleItems")
+                        .HasForeignKey("ConcessionSaleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConcessionItem");
+
+                    b.Navigation("ConcessionSale");
+                });
+
             modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.Customer", b =>
                 {
                     b.HasOne("PRN222_CinemaManagement.Models.Entities.User", "User")
@@ -1346,6 +1489,11 @@ namespace PRN222_CinemaManagement.Data.Migrations
             modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.ConcessionItem", b =>
                 {
                     b.Navigation("BookingConcessions");
+                });
+
+            modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.ConcessionSale", b =>
+                {
+                    b.Navigation("ConcessionSaleItems");
                 });
 
             modelBuilder.Entity("PRN222_CinemaManagement.Models.Entities.Customer", b =>

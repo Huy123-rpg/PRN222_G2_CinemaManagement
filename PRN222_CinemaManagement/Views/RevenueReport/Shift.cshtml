@@ -1,0 +1,265 @@
+@model IEnumerable<PRN222_CinemaManagement.Models.Entities.Payment>
+@{
+    ViewData["Title"] = "Báo cáo doanh thu theo ca";
+    var concessionSales = ViewBag.ConcessionSales as List<PRN222_CinemaManagement.Models.Entities.ConcessionSale> ?? new();
+    var staffList = ViewBag.StaffList as List<PRN222_CinemaManagement.Models.Entities.Staff> ?? new();
+    int? selectedStaffId = ViewBag.SelectedStaffId as int?;
+    var selectedStaff = staffList.FirstOrDefault(s => s.StaffId == selectedStaffId);
+
+    string selectedDate = ViewBag.SelectedDate ?? "";
+    string startTime = ViewBag.StartTime ?? "08:00";
+    string endTime = ViewBag.EndTime ?? "16:00";
+    string vnStart = ViewBag.VnStartDisplay ?? "";
+    string vnEnd = ViewBag.VnEndDisplay ?? "";
+    bool isOvernight = ViewBag.IsOvernight ?? false;
+
+    decimal ticketRev = ViewBag.TotalTicketRevenue ?? 0m;
+    decimal concRev = ViewBag.TotalConcessionRevenue ?? 0m;
+    decimal grandTotal = ViewBag.GrandTotalRevenue ?? 0m;
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int totalPages = ViewBag.TotalPages ?? 1;
+    int totalItems = ViewBag.TotalItems ?? Model.Count();
+    int pageSize = ViewBag.PageSize ?? 10;
+    bool hasData = Model.Any() || concessionSales.Any();
+}
+
+<div class="container my-3">
+    @* Thanh điều hướng và nút in *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <div class="btn-group btn-group-sm mb-2 d-print-none">
+                <a asp-action="Daily" asp-route-date="@selectedDate" class="btn btn-outline-primary">Báo cáo theo ngày (UC-28)</a>
+                <a asp-action="Shift" class="btn btn-primary active">Báo cáo theo ca (UC-29)</a>
+                <a asp-action="Cancellation" class="btn btn-outline-primary">Báo cáo hủy vé (UC-30)</a>
+                <a asp-action="Reconciliation" asp-route-date="@selectedDate" class="btn btn-outline-primary">Đối soát doanh thu (TEC-08)</a>
+            </div>
+            <h3 class="text-primary mb-0">Báo cáo doanh thu ca làm việc</h3>
+        </div>
+        <button onclick="window.print()" class="btn btn-outline-secondary btn-sm d-print-none">
+            <i class="bi bi-printer"></i> In báo cáo
+        </button>
+    </div>
+
+    @* Form lọc ca: Ngày, Giờ bắt đầu, Giờ kết thúc, Nhân viên *@
+    <div class="card shadow-sm mb-3 d-print-none">
+        <div class="card-body py-2">
+            <form method="get" asp-action="Shift" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label mb-0 small fw-semibold">Ngày ca:</label>
+                    <input type="date" name="date" value="@selectedDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-0 small fw-semibold">Từ giờ:</label>
+                    <input type="time" name="startTime" value="@startTime" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label mb-0 small fw-semibold">Đến giờ:</label>
+                    <input type="time" name="endTime" value="@endTime" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-0 small fw-semibold">Nhân viên:</label>
+                    <select name="staffId" class="form-select form-select-sm">
+                        <option value="">-- Tất cả nhân viên --</option>
+                        @foreach (var s in staffList)
+                        {
+                            if (selectedStaffId == s.StaffId)
+                            {
+                                <option value="@s.StaffId" selected>@(s.User?.FullName ?? "Staff") (@s.StaffCode)</option>
+                            }
+                            else
+                            {
+                                <option value="@s.StaffId">@(s.User?.FullName ?? "Staff") (@s.StaffCode)</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Xem ca</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Tóm tắt khoảng thời gian ca *@
+    <div class="alert alert-info py-2 mb-3 d-flex justify-content-between align-items-center small">
+        <div>
+            Khoảng thời gian: <strong>@vnStart</strong> đến <strong>@vnEnd</strong> (Giờ VN UTC+7)
+            @if (isOvernight)
+            {
+                <span class="badge bg-warning text-dark ms-2">Ca qua đêm</span>
+            }
+        </div>
+        <div>
+            Nhân viên: <strong>@(selectedStaff != null ? selectedStaff.User?.FullName + " (" + selectedStaff.StaffCode + ")" : "Tất cả")</strong>
+        </div>
+    </div>
+
+    @* 3 Thẻ chỉ số chính *@
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-primary h-100 p-3">
+                <div class="text-muted small">Doanh thu vé trong ca:</div>
+                <h4 class="text-primary fw-bold my-1">@ticketRev.ToString("N0") đ</h4>
+                <div class="small text-muted">@ViewBag.TicketOrderCount đơn | @ViewBag.TotalTicketsSold vé</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-warning h-100 p-3">
+                <div class="text-muted small">Doanh thu bắp nước trong ca:</div>
+                <h4 class="text-warning fw-bold my-1 text-dark">@concRev.ToString("N0") đ</h4>
+                <div class="small text-muted">Quầy: @(((decimal)ViewBag.StandaloneConcessionRevenue).ToString("N0")) đ | Kèm vé: @(((decimal)ViewBag.BookingConcessionRevenue).ToString("N0")) đ</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-success bg-light h-100 p-3">
+                <div class="text-muted small">Tổng doanh thu ca:</div>
+                <h4 class="text-success fw-bold my-1">@grandTotal.ToString("N0") đ</h4>
+                <div class="small text-muted">Hoàn tiền: @(((decimal)ViewBag.TotalRefund).ToString("N0")) đ</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!hasData)
+    {
+        <div class="alert alert-light text-center py-4 border shadow-sm">
+            <h5 class="text-muted mb-1">Không có giao dịch nào trong ca từ @vnStart đến @vnEnd.</h5>
+            <small class="text-muted">Doanh thu ghi nhận bằng 0 đ.</small>
+        </div>
+    }
+    else
+    {
+        @* Bảng 1: Giao dịch vé trong ca *@
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light py-2 fw-bold text-primary">
+                Giao dịch bán vé & đặt chỗ trong ca (@totalItems đơn)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã GD</th>
+                            <th>Mã đơn</th>
+                            <th>Giờ (VN)</th>
+                            <th>Kênh</th>
+                            <th>Thu ngân</th>
+                            <th class="text-center">Vé</th>
+                            <th class="text-end">Tiền vé</th>
+                            <th class="text-end">Bắp nước</th>
+                            <th class="text-end">Hoàn tiền</th>
+                            <th class="text-end fw-bold">Thực thu</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model)
+                        {
+                            decimal rawConc = p.Booking.BookingConcessions.Sum(bc => (decimal?)bc.Subtotal) ?? 0m;
+                            decimal net = p.Amount - p.RefundAmount;
+                            decimal effConc = 0m;
+                            decimal effTicket = 0m;
+
+                            if (net <= 0)
+                            {
+                                effConc = 0m;
+                                effTicket = 0m;
+                            }
+                            else if (p.RefundAmount > 0)
+                            {
+                                decimal ratio = p.Amount > 0 ? (net / p.Amount) : 0m;
+                                effConc = Math.Round(rawConc * ratio, 2);
+                                effTicket = net - effConc;
+                            }
+                            else
+                            {
+                                effConc = rawConc;
+                                effTicket = Math.Max(0, net - effConc);
+                            }
+
+                            <tr>
+                                <td class="font-monospace">@p.PaymentCode</td>
+                                <td class="font-monospace">@p.Booking.BookingCode</td>
+                                <td>@p.PaidAt?.ToLocalTime().ToString("HH:mm:ss")</td>
+                                <td><span class="badge bg-secondary">@p.Booking.BookingChannel</span></td>
+                                <td>@(p.Booking.Staff?.User?.FullName ?? (p.Booking.BookingChannel == "Online" ? "Online" : "Staff"))</td>
+                                <td class="text-center">@p.Booking.Tickets.Count(t => t.Status != "Cancelled")</td>
+                                <td class="text-end">@effTicket.ToString("N0") đ</td>
+                                <td class="text-end">@(effConc > 0 ? effConc.ToString("N0") + " đ" : "-")</td>
+                                <td class="text-end text-danger">@(p.RefundAmount > 0 ? "-" + p.RefundAmount.ToString("N0") + " đ" : "-")</td>
+                                <td class="text-end fw-bold text-success">@net.ToString("N0") đ</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (totalPages > 1)
+            {
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 d-print-none">
+                    <div class="text-muted small">
+                        Hiển thị @(((currentPage - 1) * pageSize) + 1) - @Math.Min(currentPage * pageSize, totalItems) trên tổng số @totalItems đơn
+                    </div>
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Shift" asp-route-date="@selectedDate" asp-route-startTime="@startTime" asp-route-endTime="@endTime" asp-route-staffId="@selectedStaffId" asp-route-page="@(currentPage - 1)">&laquo; Trước</a>
+                            </li>
+                            @for (int p = 1; p <= totalPages; p++)
+                            {
+                                <li class="page-item @(p == currentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Shift" asp-route-date="@selectedDate" asp-route-startTime="@startTime" asp-route-endTime="@endTime" asp-route-staffId="@selectedStaffId" asp-route-page="@p">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Shift" asp-route-date="@selectedDate" asp-route-startTime="@startTime" asp-route-endTime="@endTime" asp-route-staffId="@selectedStaffId" asp-route-page="@(currentPage + 1)">Sau &raquo;</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+            else
+            {
+                <div class="card-footer bg-white text-muted small py-2 d-print-none">
+                    Hiển thị @totalItems / @totalItems đơn
+                </div>
+            }
+        </div>
+
+        @* Bảng 2: Bắp nước quầy trong ca *@
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light py-2 fw-bold text-dark">
+                Hóa đơn bắp nước bán riêng tại quầy trong ca (@concessionSales.Count đơn)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã hóa đơn</th>
+                            <th>Giờ (VN)</th>
+                            <th>Thu ngân</th>
+                            <th>Chi tiết món</th>
+                            <th class="text-center">PT thanh toán</th>
+                            <th class="text-end fw-bold">Tổng tiền</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var cs in concessionSales)
+                        {
+                            <tr>
+                                <td class="font-monospace">@cs.SaleCode</td>
+                                <td>@cs.SaleDate.ToLocalTime().ToString("HH:mm:ss")</td>
+                                <td>@(cs.Staff?.User?.FullName ?? "Staff")</td>
+                                <td>
+                                    @string.Join(", ", cs.ConcessionSaleItems.Select(i => (i.ConcessionItem?.Name ?? "Món") + " x" + i.Quantity))
+                                </td>
+                                <td class="text-center"><span class="badge bg-light text-dark border">@cs.PaymentMethod</span></td>
+                                <td class="text-end fw-bold text-success">@cs.TotalAmount.ToString("N0") đ</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    @@media print { .d-print-none { display: none !important; } }
+</style>

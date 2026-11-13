@@ -1,0 +1,193 @@
+@model IEnumerable<PRN222_CinemaManagement.Models.Entities.Booking>
+@{
+    ViewData["Title"] = "Báo cáo hủy vé & hoàn tiền";
+    string fromDate = ViewBag.FromDate ?? "";
+    string toDate = ViewBag.ToDate ?? "";
+    string statusFilter = ViewBag.StatusFilter ?? "All";
+
+    int totalBookings = ViewBag.TotalBookings ?? 0;
+    int totalTickets = ViewBag.TotalCancelledTickets ?? 0;
+    decimal totalVal = ViewBag.TotalCancelledValue ?? 0m;
+    decimal totalRefund = ViewBag.TotalRefunded ?? 0m;
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int totalPages = ViewBag.TotalPages ?? 1;
+    int totalItems = ViewBag.TotalItems ?? Model.Count();
+    int pageSize = ViewBag.PageSize ?? 10;
+}
+
+<div class="container my-3">
+    @* Thanh điều hướng báo cáo và nút in *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <div class="btn-group btn-group-sm mb-2 d-print-none">
+                <a asp-action="Daily" class="btn btn-outline-primary">Báo cáo theo ngày (UC-28)</a>
+                <a asp-action="Shift" class="btn btn-outline-primary">Báo cáo theo ca (UC-29)</a>
+                <a asp-action="Cancellation" class="btn btn-primary active">Báo cáo hủy vé (UC-30)</a>
+                <a asp-action="Reconciliation" asp-route-date="@fromDate" class="btn btn-outline-primary">Đối soát doanh thu (TEC-08)</a>
+            </div>
+            <h3 class="text-primary mb-0">Báo cáo hủy vé & hoàn tiền</h3>
+        </div>
+        <button onclick="window.print()" class="btn btn-outline-secondary btn-sm d-print-none">
+            <i class="bi bi-printer"></i> In báo cáo
+        </button>
+    </div>
+
+    @* Form lọc theo khoảng ngày tạo đơn và trạng thái *@
+    <div class="card shadow-sm mb-3 d-print-none">
+        <div class="card-body py-2">
+            <form method="get" asp-action="Cancellation" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label mb-0 small fw-semibold">Từ ngày đặt vé:</label>
+                    <input type="date" name="fromDate" value="@fromDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-0 small fw-semibold">Đến ngày đặt vé:</label>
+                    <input type="date" name="toDate" value="@toDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-0 small fw-semibold">Trạng thái đơn:</label>
+                    <select name="statusFilter" class="form-select form-select-sm">
+                        <option value="All" selected="@(statusFilter == "All")">-- Tất cả trạng thái hủy/hoàn --</option>
+                        <option value="Cancelled" selected="@(statusFilter == "Cancelled")">Đã hủy (Cancelled)</option>
+                        <option value="Refunded" selected="@(statusFilter == "Refunded")">Đã hoàn tiền (Refunded)</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-fill">Lọc đơn</button>
+                    <a asp-action="Cancellation" class="btn btn-outline-secondary btn-sm">Tất cả</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* Ghi chú giới hạn kỹ thuật *@
+    <div class="alert alert-warning py-2 mb-3 small d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+        <div>
+            <strong>Lưu ý về dữ liệu:</strong> Cơ sở dữ liệu hiện tại <em>chưa có cột thời điểm hủy (CancelledAt)</em> hoặc <em>thời điểm hoàn tiền (RefundedAt)</em>.
+            Báo cáo đang thống kê các đơn có phát sinh trạng thái hủy/hoàn theo <strong>Ngày đặt vé ban đầu (BookingDate)</strong>.
+            Hệ thống phân biệt rõ giữa <em>giá trị đơn bị hủy</em> và <em>tiền thực tế đã hoàn trả</em>.
+        </div>
+    </div>
+
+    @* 3 Thẻ KPI chính *@
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-danger h-100 p-3">
+                <div class="text-muted small">Số đơn bị hủy / hoàn:</div>
+                <h4 class="text-danger fw-bold my-1">@totalBookings đơn</h4>
+                <div class="small text-muted">Tổng số vé bị hủy: <strong>@totalTickets</strong> vé</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-secondary h-100 p-3">
+                <div class="text-muted small">Tổng giá trị đơn hủy:</div>
+                <h4 class="text-secondary fw-bold my-1">@totalVal.ToString("N0") đ</h4>
+                <div class="small text-muted">Giá trị ban đầu của các đơn hủy</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-warning bg-light h-100 p-3">
+                <div class="text-muted small">Tổng tiền thực tế đã hoàn trả:</div>
+                <h4 class="text-warning fw-bold my-1 text-dark">@totalRefund.ToString("N0") đ</h4>
+                <div class="small text-muted">Thống kê từ RefundAmount của Payment</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-light text-center py-4 border shadow-sm">
+            <h5 class="text-muted mb-1">Không có đơn đặt vé nào bị hủy hoặc hoàn tiền.</h5>
+            <small class="text-muted">Hệ thống ghi nhận 0 đơn hủy trong phạm vi lọc.</small>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light py-2 fw-bold text-danger">
+                Danh sách các đơn đặt vé bị hủy / hoàn tiền (@totalItems đơn)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã đơn</th>
+                            <th>Ngày đặt ban đầu (VN)</th>
+                            <th>Kênh</th>
+                            <th>Phim / Phòng</th>
+                            <th>Khách / Thu ngân</th>
+                            <th class="text-center">Trạng thái</th>
+                            <th class="text-center">Vé hủy</th>
+                            <th class="text-end">Giá trị đơn</th>
+                            <th class="text-end fw-bold">Tiền hoàn trả</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in Model)
+                        {
+                            decimal refAmt = b.Payments.Sum(p => p.RefundAmount);
+                            int canTickets = b.Tickets.Count(t => t.Status == "Cancelled" || b.Status == "Cancelled" || b.Status == "Refunded");
+                            string actor = b.BookingChannel == "Counter"
+                                ? (b.Staff?.User?.FullName ?? "Staff") + " (" + (b.Staff?.StaffCode ?? "STF") + ")"
+                                : (b.Customer?.User?.FullName ?? "Online Customer");
+                            <tr>
+                                <td class="font-monospace fw-bold">@b.BookingCode</td>
+                                <td>
+                                    <div>@b.BookingDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div>
+                                    <small class="text-muted">(Ngày tạo đơn)</small>
+                                </td>
+                                <td><span class="badge bg-secondary">@b.BookingChannel</span></td>
+                                <td>
+                                    <div>@(b.Screening?.Movie?.Title ?? "N/A")</div>
+                                    <small class="text-muted">@(b.Screening?.Auditorium?.Name ?? "")</small>
+                                </td>
+                                <td>@actor</td>
+                                <td class="text-center">
+                                    <span class="badge @(b.Status == "Cancelled" ? "bg-danger" : "bg-warning text-dark")">@b.Status</span>
+                                </td>
+                                <td class="text-center fw-bold">@canTickets / @b.Tickets.Count</td>
+                                <td class="text-end">@b.TotalAmount.ToString("N0") đ</td>
+                                <td class="text-end fw-bold text-danger">@(refAmt > 0 ? refAmt.ToString("N0") + " đ" : "0 đ")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (totalPages > 1)
+            {
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 d-print-none">
+                    <div class="text-muted small">
+                        Hiển thị @(((currentPage - 1) * pageSize) + 1) - @Math.Min(currentPage * pageSize, totalItems) trên tổng số @totalItems đơn
+                    </div>
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" asp-action="Cancellation" asp-route-fromDate="@fromDate" asp-route-toDate="@toDate" asp-route-statusFilter="@statusFilter" asp-route-page="@(currentPage - 1)">&laquo; Trước</a>
+                            </li>
+                            @for (int p = 1; p <= totalPages; p++)
+                            {
+                                <li class="page-item @(p == currentPage ? "active" : "")">
+                                    <a class="page-link" asp-action="Cancellation" asp-route-fromDate="@fromDate" asp-route-toDate="@toDate" asp-route-statusFilter="@statusFilter" asp-route-page="@p">@p</a>
+                                </li>
+                            }
+                            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                <a class="page-link" asp-action="Cancellation" asp-route-fromDate="@fromDate" asp-route-toDate="@toDate" asp-route-statusFilter="@statusFilter" asp-route-page="@(currentPage + 1)">Sau &raquo;</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+            else
+            {
+                <div class="card-footer bg-white text-muted small py-2 d-print-none">
+                    Hiển thị @totalItems / @totalItems đơn
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    @@media print { .d-print-none { display: none !important; } }
+</style>

@@ -1,0 +1,228 @@
+@model PRN222_CinemaManagement.Models.Entities.Booking
+@{
+    ViewData["Title"] = "Hóa đơn bán vé tại quầy - " + Model.BookingCode;
+    var payment = Model.Payments.FirstOrDefault(p => p.PaymentStatus == "Success") ?? Model.Payments.FirstOrDefault();
+    var vnBookingDate = Model.BookingDate.ToLocalTime();
+    var vnStart = Model.Screening.StartAt.ToLocalTime();
+    var vnEnd = Model.Screening.EndAt.ToLocalTime();
+    var concessionSale = ViewBag.ConcessionSale as PRN222_CinemaManagement.Models.Entities.ConcessionSale;
+}
+
+<div class="container my-4">
+    @* Thanh công cụ phía trên *@
+    <div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+        <div>
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Về danh sách suất chiếu
+            </a>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" onclick="window.print(); return false;" class="btn btn-primary">
+                <i class="bi bi-printer"></i> In hóa đơn
+            </button>
+            @if (concessionSale != null)
+            {
+                <a href="@Url.Action("Receipt", "Concession", new { id = concessionSale.ConcessionSaleId })" target="_blank" class="btn btn-outline-info">
+                    <i class="bi bi-cup-straw"></i> In riêng hóa đơn bắp nước
+                </a>
+            }
+            <a asp-action="Index" class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Bán đơn tiếp theo
+            </a>
+        </div>
+    </div>
+
+    @* Thông báo thành công nếu có *@
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show d-print-none" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="mx-auto" style="max-width: 650px;">
+        @* LIÊN 1: HÓA ĐƠN VÉ XEM PHIM *@
+        <div class="receipt-container p-4 bg-white border border-2 rounded shadow-sm mb-4">
+            <div class="text-center pb-3 border-bottom border-2">
+                <h4 class="fw-bold text-uppercase mb-1">PRN222 CINEMA</h4>
+                <div class="text-muted small">HỆ THỐNG RẠP CHIẾU PHIM HIỆN ĐẠI</div>
+                <div class="fw-bold fs-6 mt-2 text-primary">LIÊN 1: HÓA ĐƠN VÉ XEM PHIM TẠI QUẦY</div>
+            </div>
+
+            <div class="my-3 small">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <span class="text-muted">Mã đơn đặt vé:</span>
+                        <div class="fw-bold font-monospace fs-6">@Model.BookingCode</div>
+                    </div>
+                    <div class="col-6 text-end">
+                        <span class="text-muted">Thời gian bán:</span>
+                        <div class="fw-bold">@vnBookingDate.ToString("dd/MM/yyyy HH:mm:ss")</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted">Kênh bán:</span>
+                        <div class="fw-semibold">Quầy thu ngân (Counter)</div>
+                    </div>
+                    <div class="col-6 text-end">
+                        <span class="text-muted">Thu ngân:</span>
+                        <div class="fw-bold">@(Model.Staff?.User?.FullName ?? "Staff") (@(Model.Staff?.StaffCode ?? "STF"))</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 bg-light rounded my-3">
+                <h5 class="fw-bold text-dark mb-1">@Model.Screening.Movie.Title</h5>
+                <div class="row g-2 small">
+                    <div class="col-6">
+                        <span class="text-muted">Phòng chiếu:</span>
+                        <div class="fw-bold fs-6 text-primary">@Model.Screening.Auditorium.Name</div>
+                    </div>
+                    <div class="col-6 text-end">
+                        <span class="text-muted">Thời lượng:</span>
+                        <div>@Model.Screening.Movie.DurationMinutes phút | @Model.Screening.Movie.AgeRating</div>
+                    </div>
+                    <div class="col-12 border-top pt-2 mt-1">
+                        <span class="text-muted">Suất chiếu:</span>
+                        <div class="fw-bold text-danger">
+                            @vnStart.ToString("HH:mm") - @vnEnd.ToString("HH:mm") (Ngày @vnStart.ToString("dd/MM/yyyy"))
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <div class="fw-bold mb-2 small text-uppercase text-muted">Danh sách vé xuất:</div>
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th class="text-center" style="width: 40px;">STT</th>
+                            <th>Mã vé</th>
+                            <th class="text-center">Ghế</th>
+                            <th>Loại ghế</th>
+                            <th class="text-end">Đơn giá</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ int idx = 1; }
+                        @foreach (var ticket in Model.Tickets)
+                        {
+                            var seat = ticket.ScreeningSeat?.Seat;
+                            string seatName = seat != null ? $"{seat.RowLabel}{seat.SeatNumber}" : "N/A";
+                            <tr>
+                                <td class="text-center small">@(idx++)</td>
+                                <td><span class="font-monospace small">@ticket.TicketCode</span></td>
+                                <td class="text-center fw-bold text-primary">@seatName</td>
+                                <td class="small">@(seat?.SeatType?.TypeName ?? "Standard")</td>
+                                <td class="text-end fw-semibold">@ticket.Price.ToString("N0") đ</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light">
+                            <th colspan="4" class="text-end">Tổng tiền vé (@Model.Tickets.Count vé):</th>
+                            <th class="text-end text-danger fw-bold fs-6">@Model.TotalAmount.ToString("N0") đ</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="border rounded p-2 bg-light small mb-2">
+                <div class="d-flex justify-content-between mb-1">
+                    <span>Phương thức thanh toán vé:</span>
+                    <span class="fw-bold">@(payment?.PaymentMethod ?? "Cash")</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Trạng thái thanh toán:</span>
+                    <span class="badge bg-success">@(payment?.PaymentStatus ?? "Success")</span>
+                </div>
+            </div>
+
+            <div class="text-center text-muted small border-top pt-2">
+                <p class="mb-0">Vé đã in tại quầy. Chúc quý khách xem phim vui vẻ!</p>
+            </div>
+        </div>
+
+        @* LIÊN 2: HÓA ĐƠN BẮP NƯỚC (NẾU CÓ MUA KÈM) *@
+        @if (concessionSale != null)
+        {
+            <div class="receipt-container p-4 bg-white border border-2 rounded shadow-sm mb-4 border-info">
+                <div class="text-center pb-3 border-bottom border-2">
+                    <h4 class="fw-bold text-uppercase mb-1">PRN222 CINEMA - BẮP NƯỚC</h4>
+                    <div class="fw-bold fs-6 mt-1 text-info">LIÊN 2: HÓA ĐƠN BẮP NƯỚC BÁN KÈM TẠI QUẦY</div>
+                </div>
+
+                <div class="my-3 small">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <span class="text-muted">Mã hóa đơn bắp nước:</span>
+                            <div class="fw-bold font-monospace fs-6">@concessionSale.SaleCode</div>
+                        </div>
+                        <div class="col-6 text-end">
+                            <span class="text-muted">Thời gian xuất:</span>
+                            <div class="fw-bold">@concessionSale.SaleDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</div>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted">Phương thức thanh toán:</span>
+                            <div class="fw-semibold">@concessionSale.PaymentMethod</div>
+                        </div>
+                        <div class="col-6 text-end">
+                            <span class="text-muted">Trạng thái:</span>
+                            <span class="badge bg-success">@concessionSale.Status</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light small">
+                            <tr>
+                                <th class="text-center" style="width: 40px;">STT</th>
+                                <th>Sản phẩm</th>
+                                <th class="text-center" style="width: 60px;">SL</th>
+                                <th class="text-end" style="width: 100px;">Đơn giá</th>
+                                <th class="text-end" style="width: 120px;">Thành tiền</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ int cIdx = 1; }
+                            @foreach (var cItem in concessionSale.ConcessionSaleItems)
+                            {
+                                <tr>
+                                    <td class="text-center small">@(cIdx++)</td>
+                                    <td>@cItem.ConcessionItem.Name</td>
+                                    <td class="text-center fw-bold">@cItem.Quantity</td>
+                                    <td class="text-end">@cItem.UnitPrice.ToString("N0") đ</td>
+                                    <td class="text-end fw-semibold">@cItem.Subtotal.ToString("N0") đ</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light">
+                                <th colspan="4" class="text-end">Tổng tiền bắp nước:</th>
+                                <th class="text-end text-success fw-bold fs-6">@concessionSale.TotalAmount.ToString("N0") đ</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="text-center text-muted small border-top pt-2">
+                    <p class="mb-0">Thực phẩm đã xuất kho không áp dụng đổi trả.</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    @@media print {
+        .d-print-none { display: none !important; }
+        body { background-color: #fff !important; }
+        .receipt-container {
+            border: 1px solid #ccc !important;
+            box-shadow: none !important;
+            max-width: 100% !important;
+            page-break-after: always;
+        }
+    }
+</style>
