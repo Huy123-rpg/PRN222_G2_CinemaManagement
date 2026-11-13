@@ -28,7 +28,32 @@ else
                         <td><strong>@booking.MovieTitle</strong><br /><code>@booking.BookingCode</code></td>
                         <td>@BookingDisplay.VietnamTime(booking.StartAt).ToString("HH:mm dd/MM/yyyy")<br /><small>@booking.Auditorium</small></td>
                         <td>@booking.TotalAmount.ToString("N0") đ</td><td>@BookingDisplay.StatusText(booking.Status)</td>
-                        <td><a asp-action="@(booking.Status == "Confirmed" ? "Success" : "Checkout")" asp-route-id="@booking.BookingId" class="btn btn-sm btn-outline-primary">@(booking.Status == "Confirmed" ? "Xem vé" : "Xem đơn")</a></td>
+                        <td>
+                            <a asp-action="@(booking.Status == "Confirmed" ? "Success" : "Checkout")" asp-route-id="@booking.BookingId" class="btn btn-sm btn-outline-primary me-1">@(booking.Status == "Confirmed" ? "Xem vé" : "Xem đơn")</a>
+                            @if (booking.Status == "Confirmed")
+                            {
+                                var (isEligible, reason) = CancellationRules.CheckEligibility(booking.Status, booking.StartAt, booking.Tickets.Select(t => t.Status));
+                                if (isEligible)
+                                {
+                                    <form asp-controller="Ticket" asp-action="CancelMyBooking" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="bookingId" value="@booking.BookingId" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn có chắc chắn muốn hủy đơn vé này không? Ghế sẽ được hoàn trả lại.');">
+                                            Hủy vé
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" disabled title="@reason">
+                                        Không thể hủy
+                                    </button>
+                                    <small class="text-danger d-block mt-1" style="font-size: 0.65rem;" title="@reason">
+                                        (@(reason.Contains("soát") ? "Đã soát vé" : (booking.StartAt < DateTime.UtcNow ? "Đã qua giờ" : "Sát giờ <60p")))
+                                    </small>
+                                }
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
@@ -75,4 +100,8 @@ else
             </ul>
         </nav>
     }
+
+    <div class="alert alert-light border mt-3 small text-muted">
+        ℹ️ <strong>Quy tắc hủy vé:</strong> Quý khách chỉ có thể hủy vé trước giờ chiếu ít nhất <strong>60 phút</strong> và vé chưa được soát vào rạp.
+    </div>
 }

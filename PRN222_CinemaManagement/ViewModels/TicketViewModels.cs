@@ -15,22 +15,27 @@ public static class CancellationRules
     // Quy tắc TEC-06: Chỉ được hủy trước giờ chiếu ít nhất 60 phút và vé chưa từng check-in
     public static (bool IsEligible, string Reason) CheckEligibility(Booking booking)
     {
-        if (booking.Status != "Confirmed")
-        {
-            return (false, $"Đơn vé đang ở trạng thái '{booking.Status}', không thể hủy.");
-        }
-
-        if (booking.Tickets.Any(t => t.Status == "CheckedIn"))
-        {
-            return (false, "Vé trong đơn này đã được soát vào rạp (CheckedIn), không thể hủy.");
-        }
-
         if (booking.Screening == null)
         {
             return (false, "Không tìm thấy thông tin suất chiếu.");
         }
 
-        var timeUntilShow = booking.Screening.StartAt - DateTime.UtcNow;
+        return CheckEligibility(booking.Status, booking.Screening.StartAt, booking.Tickets.Select(t => t.Status));
+    }
+
+    public static (bool IsEligible, string Reason) CheckEligibility(string status, DateTime startAt, IEnumerable<string> ticketStatuses)
+    {
+        if (status != "Confirmed")
+        {
+            return (false, $"Đơn vé đang ở trạng thái '{status}', không thể hủy.");
+        }
+
+        if (ticketStatuses.Any(s => s == "CheckedIn"))
+        {
+            return (false, "Vé trong đơn này đã được soát vào rạp (CheckedIn), không thể hủy.");
+        }
+
+        var timeUntilShow = startAt - DateTime.UtcNow;
         if (timeUntilShow.TotalMinutes < 60)
         {
             return (false, "Quy định chỉ được phép hủy trước giờ chiếu ít nhất 60 phút.");

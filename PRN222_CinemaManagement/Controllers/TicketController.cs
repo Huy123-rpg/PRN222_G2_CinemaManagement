@@ -88,14 +88,28 @@ public class TicketController(CinemaDbContext context) : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     [SessionAuthorize(Roles = "Customer")]
-    public async Task<IActionResult> CancelMyBooking(int bookingId)
+    public async Task<IActionResult> CancelMyBooking(int bookingId, string? returnUrl = null)
     {
+        IActionResult RedirectBack()
+        {
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            string referer = Request.Headers["Referer"].ToString();
+            if (!string.IsNullOrEmpty(referer) && referer.Contains("/Booking/MyBookings", StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction("MyBookings", "Booking");
+            }
+            return RedirectToAction(nameof(MyBookings));
+        }
+
         int? userId = HttpContext.Session.GetInt32("UserId");
         var customer = await context.Customers.FirstOrDefaultAsync(c => c.UserId == userId);
         if (customer == null)
         {
             TempData["ErrorMessage"] = "Không tìm thấy thông tin khách hàng.";
-            return RedirectToAction(nameof(MyBookings));
+            return RedirectBack();
         }
 
         var booking = await context.Bookings
@@ -106,7 +120,7 @@ public class TicketController(CinemaDbContext context) : Controller
         if (booking == null)
         {
             TempData["ErrorMessage"] = "Đơn vé không tồn tại hoặc bạn không có quyền hủy.";
-            return RedirectToAction(nameof(MyBookings));
+            return RedirectBack();
         }
 
         // Kiểm tra quy tắc hủy vé theo TEC-06 (trước 60 phút và chưa check-in)
@@ -114,7 +128,7 @@ public class TicketController(CinemaDbContext context) : Controller
         if (!isEligible)
         {
             TempData["ErrorMessage"] = reason;
-            return RedirectToAction(nameof(MyBookings));
+            return RedirectBack();
         }
 
         // Bước 1: Đổi trạng thái đơn và vé sang Cancelled
@@ -140,7 +154,7 @@ public class TicketController(CinemaDbContext context) : Controller
         await context.SaveChangesAsync();
 
         TempData["SuccessMessage"] = "Đã hủy đơn đặt vé thành công! Ghế của bạn đã được hoàn trả lại hệ thống.";
-        return RedirectToAction(nameof(MyBookings));
+        return RedirectBack();
     }
 
 

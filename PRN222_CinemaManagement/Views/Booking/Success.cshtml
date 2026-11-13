@@ -41,6 +41,20 @@
                     <a asp-action="MyBookings" class="btn btn-outline-light btn-sm flex-grow-1">
                         Vé của tôi
                     </a>
+                    @if (Model.Status == "Confirmed")
+                    {
+                        var (isEligible, reason) = CancellationRules.CheckEligibility(Model.Status, Model.StartAt, Model.Tickets.Select(t => t.Status));
+                        if (isEligible)
+                        {
+                            <form asp-controller="Ticket" asp-action="CancelMyBooking" method="post" class="d-inline flex-grow-1">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="bookingId" value="@Model.BookingId" />
+                                <button type="submit" class="btn btn-danger btn-sm w-100" onclick="return confirm('Bạn có chắc chắn muốn hủy đơn vé này không? Ghế sẽ được hoàn trả lại.');">
+                                    Hủy vé này
+                                </button>
+                            </form>
+                        }
+                    }
                 </div>
             </div>
         </div>
