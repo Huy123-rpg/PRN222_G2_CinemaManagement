@@ -1,0 +1,104 @@
+@model IEnumerable<PRN222_CinemaManagement.Models.Entities.Booking>
+@using PRN222_CinemaManagement.ViewModels
+
+@{
+    ViewData["Title"] = "Lịch sử đặt vé";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Lịch sử đặt vé của bạn</h3>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <table class="table table-bordered table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã đơn</th>
+                    <th>Phim</th>
+                    <th>Suất chiếu</th>
+                    <th>Phòng</th>
+                    <th>Ghế đã đặt</th>
+                    <th>Tổng tiền</th>
+                    <th>Trạng thái</th>
+                    <th class="text-center" style="width: 220px;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            Bạn chưa có đơn đặt vé nào.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var b in Model)
+                    {
+                        var (isEligible, reason) = CancellationRules.CheckEligibility(b);
+                        <tr>
+                            <td><strong>@b.BookingCode</strong><br /><small class="text-muted">@b.BookingDate.ToString("dd/MM/yyyy HH:mm")</small></td>
+                            <td><strong class="text-primary">@b.Screening.Movie.Title</strong></td>
+                            <td>@b.Screening.StartAt.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@b.Screening.Auditorium.Name</td>
+                            <td>
+                                @foreach (var t in b.Tickets)
+                                {
+                                    <span class="badge bg-light text-dark border me-1">
+                                        @t.ScreeningSeat.Seat.RowLabel@t.ScreeningSeat.Seat.SeatNumber
+                                    </span>
+                                }
+                            </td>
+                            <td class="fw-bold text-success">@b.TotalAmount.ToString("N0") đ</td>
+                            <td>
+                                @if (b.Status == "Confirmed")
+                                {
+                                    <span class="badge bg-success">Đã thanh toán</span>
+                                }
+                                else if (b.Status == "Cancelled")
+                                {
+                                    <span class="badge bg-secondary">Đã hủy</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">@b.Status</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <a asp-action="Details" asp-route-id="@b.BookingId" class="btn btn-sm btn-outline-primary me-1">
+                                    Vé & QR
+                                </a>
+
+                                @if (isEligible)
+                                {
+                                    <form asp-action="CancelMyBooking" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="bookingId" value="@b.BookingId" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn có chắc chắn muốn hủy đơn vé này không? Ghế sẽ được hoàn trả lại.');">
+                                            Hủy vé
+                                        </button>
+                                    </form>
+                                }
+                                else if (b.Status == "Confirmed")
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" disabled title="@reason">
+                                        Không thể hủy
+                                    </button>
+                                    <small class="text-danger d-block mt-1" style="font-size: 0.65rem;" title="@reason">
+                                        (@(reason.Contains("soát") ? "Đã soát vé" : (b.Screening.StartAt < DateTime.UtcNow ? "Đã qua giờ" : "Sát giờ <60p")))
+                                    </small>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="alert alert-light border mt-3 small text-muted">
+    ℹ️ <strong>Quy tắc hủy vé:</strong> Quý khách chỉ có thể hủy vé trước giờ chiếu ít nhất <strong>60 phút</strong> và vé chưa được soát vào rạp.
+</div>

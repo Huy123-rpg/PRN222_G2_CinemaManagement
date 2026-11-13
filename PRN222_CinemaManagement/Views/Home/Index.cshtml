@@ -1,8 +1,80 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@model PRN222_CinemaManagement.ViewModels.HomePageViewModel
+@{
+    ViewData["Title"] = "Trang chủ";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
-</div>
+<main class="cinema-home">
+    <section class="cinema-home-hero">
+        <div class="cinema-home-hero-copy">
+            <p class="cinema-home-eyebrow">TRẢI NGHIỆM ĐIỆN ẢNH</p>
+            <h1>Một bộ phim hay.<br />Một buổi tối đáng nhớ.</h1>
+            <p>Khám phá phim đang chiếu và sắp khởi chiếu tại rạp.</p>
+            <a asp-controller="Movies" asp-action="Index" class="btn cinema-home-cta">Khám phá phim đang chiếu <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="cinema-home-hero-art" aria-hidden="true"><span>PHIM<br />HAY<br /><b>TRÊN<br />MÀN ẢNH LỚN</b></span></div>
+    </section>
+
+    <section class="cinema-home-section" aria-labelledby="now-showing-title">
+        <header class="cinema-home-section-heading">
+            <div><p class="cinema-home-eyebrow">ĐANG ĐƯỢC TRÌNH CHIẾU</p><h2 id="now-showing-title">Phim đang chiếu</h2></div>
+            <a asp-controller="Movies" asp-action="Index">Tất cả phim <span aria-hidden="true">→</span></a>
+        </header>
+        <div class="cinema-movie-grid">
+            @if (Model.NowShowing.Count == 0)
+            {
+                <p class="cinema-home-empty">Hiện chưa có phim đang chiếu.</p>
+            }
+            @foreach (var movie in Model.NowShowing)
+            {
+                <article class="cinema-movie-card">
+                    <a asp-controller="Movies" asp-action="Details" asp-route-id="@movie.Id" class="cinema-movie-poster-link" aria-label="Xem chi tiết phim @movie.Title">
+                        @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                        {
+                            <img class="cinema-movie-poster" src="@movie.PosterUrl" alt="Poster phim @movie.Title" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="cinema-movie-poster cinema-movie-placeholder">POSTER</div>
+                        }
+                        <span class="cinema-movie-age">@movie.AgeRating</span>
+                    </a>
+                    <h3>@movie.Title</h3>
+                    <p>@(movie.Genres.Count > 0 ? string.Join(" · ", movie.Genres) : "Phim điện ảnh")<span aria-hidden="true"> · </span>@movie.DurationMinutes phút</p>
+                    <a class="cinema-movie-button" asp-controller="Movies" asp-action="Details" asp-route-id="@movie.Id">Đặt vé</a>
+                </article>
+            }
+        </div>
+    </section>
+
+    <section class="cinema-home-section cinema-upcoming-section" aria-labelledby="upcoming-title">
+        <header class="cinema-home-section-heading">
+            <div><p class="cinema-home-eyebrow">SẮP RA MẮT</p><h2 id="upcoming-title">Phim sắp chiếu</h2></div>
+            <a asp-controller="Movie" asp-action="Index" asp-route-tab="upcoming">Xem lịch khởi chiếu <span aria-hidden="true">→</span></a>
+        </header>
+        <div class="cinema-movie-grid">
+            @if (Model.Upcoming.Count == 0)
+            {
+                <p class="cinema-home-empty">Chưa có phim sắp chiếu.</p>
+            }
+            @foreach (var movie in Model.Upcoming)
+            {
+                <article class="cinema-movie-card">
+                    <a asp-controller="Movie" asp-action="Index" asp-route-tab="upcoming" class="cinema-movie-poster-link" aria-label="Xem danh sách phim sắp chiếu">
+                        @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                        {
+                            <img class="cinema-movie-poster" src="@movie.PosterUrl" alt="Poster phim @movie.Title" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="cinema-movie-poster cinema-movie-placeholder">POSTER</div>
+                        }
+                        <span class="cinema-movie-age">@movie.AgeRating</span>
+                    </a>
+                    <h3>@movie.Title</h3>
+                    <p>@(movie.Genres.Count > 0 ? string.Join(" · ", movie.Genres) : "Phim điện ảnh")<span aria-hidden="true"> · </span>@movie.DurationMinutes phút</p>
+                    <div class="cinema-release-date">Khởi chiếu: @(movie.ReleaseDate?.ToString("dd/MM/yyyy") ?? "Sẽ cập nhật")</div>
+                </article>
+            }
+        </div>
+    </section>
+</main>

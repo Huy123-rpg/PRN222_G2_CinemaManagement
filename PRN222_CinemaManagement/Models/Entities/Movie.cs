@@ -1,22 +1,17 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace PRN222_CinemaManagement.Models.Entities;
 
-public sealed class Movie
+public class Movie
 {
-    public int Id { get; set; }
-
-    [Required, StringLength(200)]
+    public int MovieId { get; set; }
     public string Title { get; set; } = string.Empty;
-
-    [StringLength(2000)]
     public string? Description { get; set; }
-
-    [Range(1, 600)]
     public int DurationMinutes { get; set; }
-
+    public string AgeRating { get; set; } = "P";
     public DateOnly? ReleaseDate { get; set; }
-
-    [StringLength(500), Url]
     public string? PosterUrl { get; set; }
+    public string? TrailerUrl { get; set; }
+    public string Status { get; set; } = "Upcoming";
+
+    public ICollection<MovieGenre> MovieGenres { get; set; } = new List<MovieGenre>();
+    public ICollection<Screening> Screenings { get; set; } = new List<Screening>();
 }

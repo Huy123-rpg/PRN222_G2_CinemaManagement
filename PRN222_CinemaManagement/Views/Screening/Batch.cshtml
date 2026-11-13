@@ -1,0 +1,315 @@
+@model ScreeningBatchViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Lập lịch chiếu theo đợt";
+    var roomData = JsonSerializer.Serialize(Model.Auditoriums.Select(r => new { r.Id, r.Name }));
+    var slotData = JsonSerializer.Serialize(Model.Slots.Select(s => new
+    {
+        Date = s.Date?.ToString("yyyy-MM-dd"),
+        Time = s.StartTime?.ToString("HH:mm"),
+        s.AuditoriumId
+    }));
+}
+
+<section class="schedule-page batch-schedule-page" aria-labelledby="batch-title">
+    <div class="schedule-breadcrumb"><a asp-controller="Screening" asp-action="Index">Lịch chiếu</a><span aria-hidden="true">/</span><span>Lập lịch theo đợt</span></div>
+    <header class="schedule-form-header batch-page-header">
+        <div>
+            <p class="schedule-eyebrow">QUẢN LÝ RẠP / PHIM MỚI</p>
+            <h1 id="batch-title">Lập lịch chiếu theo đợt</h1>
+            <p class="text-muted mb-0">Tạo lịch linh hoạt theo ngày, rồi kiểm tra toàn bộ suất trước khi lưu.</p>
+        </div>
+        <div class="batch-steps" aria-label="Tiến trình">
+            <span class="complete">1&nbsp; Thông tin phim</span><span aria-hidden="true">—</span><strong>2&nbsp; Lịch chiếu</strong><span aria-hidden="true">—</span><span>3&nbsp; Xem trước & lưu</span>
+        </div>
+    </header>
+
+    <form asp-action="CreateBatch" method="post" id="screening-batch-form" class="batch-form" data-release="@(Model.ReleaseDate?.ToString("yyyy-MM-dd"))" data-duration="@Model.DurationMinutes" data-rooms="@roomData" data-slots="@slotData">
+        <div asp-validation-summary="All" class="alert alert-danger" role="alert" aria-live="assertive" tabindex="-1"></div>
+
+        <section class="batch-movie-summary card" aria-labelledby="batch-movie-title">
+            <div class="batch-movie-icon" aria-hidden="true">FILM</div>
+            <div class="batch-movie-copy">
+                <p class="batch-summary-label">PHIM ĐANG LẬP LỊCH</p>
+                <h2 id="batch-movie-title">@Model.MovieTitle</h2>
+                <p id="batch-movie-meta">@Model.DurationMinutes phút <span aria-hidden="true">·</span> Ngày khởi chiếu @(Model.ReleaseDate?.ToString("dd/MM/yyyy") ?? "chưa cập nhật")</p>
+            </div>
+            <div class="batch-movie-select">
+                <label asp-for="MovieId" class="form-label">Phim</label>
+                <select asp-for="MovieId" class="form-select" id="batch-movie">
+                    <option value="0">-- Chọn phim --</option>
+                    @foreach (var movie in Model.Movies)
+                    {
+                        <option value="@movie.Id" data-duration="@movie.DurationMinutes" data-release="@movie.ReleaseDate?.ToString("yyyy-MM-dd")">@movie.Title</option>
+                    }
+                </select>
+            </div>
+        </section>
+
+        <section class="batch-section card" aria-labelledby="batch-period-title">
+            <div class="batch-section-head">
+                <div><h2 id="batch-period-title">1. Chọn khoảng ngày</h2><p>Ngày đầu tiên không được trước ngày khởi chiếu. Tối đa 30 ngày mỗi đợt.</p></div>
+                <div class="batch-period-buttons" role="group" aria-label="Khoảng ngày nhanh">
+                    <button type="button" class="batch-period-button" data-days="7">7 ngày</button>
+                    <button type="button" class="batch-period-button" data-days="14">14 ngày</button>
+                    <button type="button" class="batch-period-button" data-days="30">30 ngày</button>
+                </div>
+            </div>
+            <div class="batch-date-fields">
+                <div><label asp-for="StartDate" class="form-label">Từ ngày</label><input asp-for="StartDate" type="date" class="form-control" id="batch-start-date" min="@Model.ReleaseDate?.ToString("yyyy-MM-dd")" /><span asp-validation-for="StartDate" class="text-danger"></span></div>
+                <div><label asp-for="EndDate" class="form-label">Đến ngày</label><input asp-for="EndDate" type="date" class="form-control" id="batch-end-date" min="@Model.StartDate?.ToString("yyyy-MM-dd")" /><span asp-validation-for="EndDate" class="text-danger"></span></div>
+                <div><label asp-for="BasePrice" class="form-label">Giá cơ bản áp dụng cho đợt</label><div class="input-group"><input asp-for="BasePrice" type="number" min="0" step="1000" class="form-control" /><span class="input-group-text">đ</span></div><span asp-validation-for="BasePrice" class="text-danger"></span></div>
+            </div>
+        </section>
+
+        <section class="batch-section card" aria-labelledby="batch-plan-title">
+            <div class="batch-section-head">
+                <div><h2 id="batch-plan-title">2. Thiết lập từng ngày</h2><p>Mỗi ngày có thể có giờ và phòng riêng. Mẫu chỉ điền nhanh, vẫn sửa được từng suất.</p></div>
+                <div class="batch-pattern-actions">
+                    <button type="button" class="btn btn-outline-primary" id="apply-week-pattern">Điền mẫu ngày thường / cuối tuần</button>
+                    <button type="button" class="btn btn-outline-secondary" id="clear-batch-slots">Xóa lịch</button>
+                </div>
+            </div>
+            <div class="batch-template-note"><strong>Mẫu gợi ý:</strong> ngày thường 11:00, 15:00, 19:00 · cuối tuần 10:00, 14:00, 17:30, 20:30. Phòng được phân luân phiên; có thể chỉnh lại sau khi áp dụng.</div>
+            <div id="batch-days" class="batch-days" aria-live="polite"></div>
+            <div class="batch-slot-footer"><span><strong id="batch-slot-count">0</strong> suất trong khoảng đã chọn <span aria-hidden="true">·</span> Giờ kết thúc và 15 phút dọn phòng được tính tự động</span></div>
+        </section>
+
+        @if (Model.ShowPreview)
+        {
+            <section class="batch-section card batch-preview" id="batch-preview" data-preview="true" aria-labelledby="batch-preview-title">
+                <div class="batch-section-head"><div><h2 id="batch-preview-title">3. Xem trước và kiểm tra</h2><p>@Model.Slots.Count suất được kiểm tra với lịch hiện tại và các suất khác trong đợt.</p></div>
+                    @if (Model.Conflicts.Count == 0)
+                    {
+                        <span class="badge text-bg-success batch-preview-badge">Không có xung đột</span>
+                    }
+                    else
+                    {
+                        <span class="badge text-bg-danger batch-preview-badge">@Model.Conflicts.Select(c => c.SlotIndex).Distinct().Count() suất cần chỉnh</span>
+                    }
+                </div>
+                @if (Model.Conflicts.Count > 0)
+                {
+                    <div class="batch-conflict-list" role="alert">
+                        <h3>Cần xử lý trước khi lưu</h3>
+                        @foreach (var conflict in Model.Conflicts)
+                        {
+                            <p><strong>Suất @(conflict.SlotIndex + 1):</strong> @conflict.Message
+                                @if (!string.IsNullOrWhiteSpace(conflict.ExistingMovieTitle))
+                                {
+                                    <span> · @conflict.ExistingMovieTitle, @conflict.AuditoriumName, @conflict.ExistingStartAtLocal?.ToString("dd/MM HH:mm")–@conflict.ExistingEndAtLocal?.ToString("HH:mm")</span>
+                                }
+                                else if (conflict.ExistingStartAtLocal.HasValue)
+                                {
+                                    <span> · @conflict.AuditoriumName, @conflict.ExistingStartAtLocal.Value.ToString("dd/MM HH:mm")–@conflict.ExistingEndAtLocal?.ToString("HH:mm")</span>
+                                }
+                            </p>
+                        }
+                    </div>
+                }
+                <div class="table-responsive batch-preview-table-wrap">
+                    <table class="table align-middle mb-0">
+                        <caption class="visually-hidden">Kết quả kiểm tra các suất trong đợt</caption>
+                        <thead><tr><th>Ngày chiếu</th><th>Bắt đầu</th><th>Kết thúc dự kiến</th><th>Phòng</th><th>Kết quả</th></tr></thead>
+                        <tbody>
+                        @for (var i = 0; i < Model.Slots.Count; i++)
+                        {
+                            var slot = Model.Slots[i];
+                            var conflicts = Model.Conflicts.Where(c => c.SlotIndex == i).ToList();
+                            var roomName = Model.Auditoriums.FirstOrDefault(r => r.Id == slot.AuditoriumId)?.Name ?? "Không xác định";
+                            var startAt = slot.Date.HasValue && slot.StartTime.HasValue ? slot.Date.Value.ToDateTime(slot.StartTime.Value) : (DateTime?)null;
+                            <tr class="@(conflicts.Count > 0 ? "batch-row-conflict" : "")">
+                                <td>@(slot.Date?.ToString("ddd, dd/MM/yyyy") ?? "—")</td>
+                                <td>@(slot.StartTime?.ToString("HH:mm") ?? "—")</td>
+                                <td>@(startAt?.AddMinutes(Model.DurationMinutes).ToString("dd/MM HH:mm") ?? "—")</td>
+                                <td>@roomName</td>
+                                <td>@(conflicts.Count == 0 ? "Không xung đột" : string.Join(" ", conflicts.Select(c => c.Message)))</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        <div class="batch-form-actions">
+            <a asp-controller="Movie" asp-action="Index" asp-route-tab="upcoming" class="btn btn-link">Thoát về danh sách phim</a>
+            <div>
+                <button type="submit" name="command" value="preview" class="btn btn-outline-primary schedule-action">Kiểm tra và xem trước</button>
+                @if (Model.ShowPreview && Model.Conflicts.Count == 0)
+                {
+                    <button type="submit" name="command" value="save" class="btn btn-primary schedule-action" id="save-batch">Xác nhận lưu @Model.Slots.Count suất</button>
+                }
+            </div>
+        </div>
+        <select id="batch-room-template" class="visually-hidden" aria-hidden="true" tabindex="-1">
+            <option value="0">-- Chọn phòng --</option>
+            @foreach (var room in Model.Auditoriums)
+            {
+                <option value="@room.Id">@room.Name</option>
+            }
+        </select>
+    </form>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const form = document.getElementById("screening-batch-form");
+            const daysHost = document.getElementById("batch-days");
+            if (!form || !daysHost) return;
+
+            const rooms = JSON.parse(form.dataset.rooms || "[]");
+            const initialSlots = JSON.parse(form.dataset.slots || "[]");
+            let duration = Number(form.dataset.duration || 0);
+            let slots = initialSlots.map(s => ({ date: s.Date, time: s.Time, roomId: Number(s.AuditoriumId) }));
+            const dateInput = document.getElementById("batch-start-date");
+            const endInput = document.getElementById("batch-end-date");
+            const movieSelect = document.getElementById("batch-movie");
+            const releaseMinimum = () => movieSelect.selectedOptions[0]?.dataset.release || "";
+            const pad = value => String(value).padStart(2, "0");
+            const parseDate = value => { const [y,m,d] = value.split("-").map(Number); return new Date(y,m-1,d); };
+            const dateKey = date => `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+            const prettyDate = date => date.toLocaleDateString("vi-VN", { weekday:"long", day:"2-digit", month:"2-digit", year:"numeric" });
+            const weekdays = ["Chủ Nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
+            const makeRange = () => {
+                const start = parseDate(dateInput.value);
+                const end = parseDate(endInput.value);
+                const result = [];
+                for (let date = new Date(start); date <= end && result.length < 30; date.setDate(date.getDate()+1)) result.push(new Date(date));
+                return result;
+            };
+            const setOption = (select, value) => { select.value = String(value || 0); };
+            const updateCount = () => { document.getElementById("batch-slot-count").textContent = slots.filter(s => s.date >= dateInput.value && s.date <= endInput.value).length; };
+            const slotEnd = time => {
+                if (!time || !duration) return "";
+                const [hour,minute] = time.split(":").map(Number);
+                const endMinutes = hour*60+minute+duration;
+                return `Kết thúc ${pad(Math.floor(endMinutes/60)%24)}:${pad(endMinutes%60)}${endMinutes>=1440?" (+1 ngày)":""}`;
+            };
+            const addField = (row, name, value, type, ariaLabel) => {
+                const field = document.createElement("input");
+                field.type = type;
+                field.name = name;
+                field.value = value || "";
+                field.className = "form-control batch-slot-time";
+                field.setAttribute("aria-label", ariaLabel);
+                row.append(field);
+                return field;
+            };
+            const render = () => {
+                const dateList = makeRange();
+                daysHost.replaceChildren();
+                dateList.forEach(date => {
+                    const key = dateKey(date);
+                    const day = document.createElement("section");
+                    day.className = "batch-day";
+                    day.dataset.date = key;
+                    const head = document.createElement("header");
+                    head.className = "batch-day-head";
+                    head.innerHTML = `<div><strong>${weekdays[date.getDay()]}</strong><span>${prettyDate(date)}</span></div>`;
+                    const add = document.createElement("button");
+                    add.type = "button"; add.className = "btn btn-sm btn-outline-primary"; add.textContent = "+ Thêm suất"; add.dataset.addDate = key;
+                    head.append(add);
+                    const list = document.createElement("div"); list.className = "batch-day-slots";
+                    slots.filter(s => s.date === key).forEach(slot => {
+                        const index = slots.indexOf(slot);
+                        const row = document.createElement("div"); row.className = "batch-slot-row"; row.dataset.index = index;
+                        const hiddenDate = document.createElement("input"); hiddenDate.type = "hidden"; hiddenDate.name = `Slots[${index}].Date`; hiddenDate.value = key; row.append(hiddenDate);
+                        const time = addField(row, `Slots[${index}].StartTime`, slot.time, "time", `Giờ bắt đầu ${prettyDate(date)}`);
+                        const room = document.getElementById("batch-room-template").cloneNode(true);
+                        room.removeAttribute("id"); room.removeAttribute("tabindex"); room.removeAttribute("aria-hidden"); room.name = `Slots[${index}].AuditoriumId`; room.className = "form-select batch-slot-room"; room.setAttribute("aria-label", `Phòng chiếu ${prettyDate(date)}`); setOption(room, slot.roomId);
+                        const end = document.createElement("output"); end.className = "batch-slot-end"; end.setAttribute("aria-live","polite"); end.textContent = slotEnd(slot.time);
+                        const remove = document.createElement("button"); remove.type = "button"; remove.className = "btn btn-sm btn-outline-danger batch-slot-remove"; remove.textContent = "Xóa"; remove.dataset.removeIndex = index;
+                        row.append(room,end,remove);
+                        time.addEventListener("input", () => { slots[index].time = time.value; end.textContent = slotEnd(time.value); markPreviewStale(); });
+                        room.addEventListener("change", () => { slots[index].roomId = Number(room.value); markPreviewStale(); });
+                        list.append(row);
+                    });
+                    day.append(head,list);
+                    daysHost.append(day);
+                });
+                updateCount();
+            };
+            const reindex = () => { slots = slots.filter(s => s.date >= dateInput.value && s.date <= endInput.value); render(); markPreviewStale(); };
+            const markPreviewStale = () => {
+                const preview = document.getElementById("batch-preview");
+                const save = document.getElementById("save-batch");
+                if (!preview) return;
+                if (save) save.disabled = true;
+                const warning = preview.querySelector(".batch-preview-stale");
+                if (!warning) {
+                    const note = document.createElement("p");
+                    note.className = "alert alert-warning batch-preview-stale";
+                    note.setAttribute("role","status");
+                    note.textContent = "Lịch vừa thay đổi. Hãy kiểm tra lại trước khi lưu.";
+                    preview.prepend(note);
+                }
+            };
+            const createSlot = (date, time = "19:00", roomId = rooms[0]?.Id || 0) => slots.push({date,time,roomId});
+            daysHost.addEventListener("click", event => {
+                const add = event.target.closest("[data-add-date]");
+                const remove = event.target.closest("[data-remove-index]");
+                if (add) {
+                    const current = slots.filter(s => s.date === add.dataset.addDate);
+                    const available = ["10:00","14:00","17:30","19:00","20:30"].find(t => !current.some(s => s.time === t)) || "21:30";
+                    createSlot(add.dataset.addDate,available,rooms[current.length % Math.max(rooms.length,1)]?.Id || 0);
+                    render(); markPreviewStale();
+                }
+                if (remove) { slots.splice(Number(remove.dataset.removeIndex),1); render(); markPreviewStale(); }
+            });
+            document.getElementById("apply-week-pattern").addEventListener("click", () => {
+                slots = [];
+                makeRange().forEach(date => {
+                    const times = [0,6].includes(date.getDay()) ? ["10:00","14:00","17:30","20:30"] : ["11:00","15:00","19:00"];
+                    times.forEach((time,index) => createSlot(dateKey(date),time,rooms[index % Math.max(rooms.length,1)]?.Id || 0));
+                });
+                render(); markPreviewStale();
+            });
+            document.getElementById("clear-batch-slots").addEventListener("click", () => { slots = []; render(); markPreviewStale(); });
+            document.querySelectorAll("[data-days]").forEach(button => button.addEventListener("click", () => {
+                const end = parseDate(dateInput.value); end.setDate(end.getDate()+Number(button.dataset.days)-1); endInput.value = dateKey(end); reindex();
+            }));
+            [dateInput,endInput].forEach(input => input.addEventListener("change", () => {
+                const minimum = releaseMinimum();
+                dateInput.min = minimum;
+                if (minimum && dateInput.value < minimum) dateInput.value = minimum;
+                endInput.min = dateInput.value;
+                if (endInput.value < dateInput.value) endInput.value = dateInput.value;
+                const start = parseDate(dateInput.value), end = parseDate(endInput.value);
+                if ((end-start)/86400000 > 29) { end.setDate(start.getDate()+29); endInput.value = dateKey(end); }
+                reindex();
+            }));
+            movieSelect.addEventListener("change", () => {
+                const selected = movieSelect.selectedOptions[0];
+                duration = Number(selected?.dataset.duration || 0);
+                form.dataset.duration = String(duration);
+                form.dataset.release = selected?.dataset.release || "";
+                document.getElementById("batch-movie-title").textContent = selected?.textContent || "Chọn phim";
+                const release = selected?.dataset.release || "chưa cập nhật";
+                const releaseLabel = release === "chưa cập nhật" ? release : new Date(`${release}T00:00:00`).toLocaleDateString("vi-VN");
+                document.getElementById("batch-movie-meta").innerHTML = `${duration} phút · Ngày khởi chiếu ${releaseLabel}`;
+                const minimum = release === "chưa cập nhật" ? "" : release;
+                dateInput.min = minimum;
+                if (minimum && dateInput.value < minimum) {
+                    dateInput.value = minimum;
+                    const suggestedEnd = parseDate(minimum);
+                    suggestedEnd.setDate(suggestedEnd.getDate()+6);
+                    endInput.value = dateKey(suggestedEnd);
+                }
+                endInput.min = dateInput.value;
+                render(); markPreviewStale();
+            });
+            if (document.getElementById("batch-preview")) {
+                const save = document.getElementById("save-batch");
+                if (save) save.disabled = false;
+                const preview = document.getElementById("batch-preview");
+                if (preview) preview.dataset.preview = "fresh";
+            }
+            render();
+            const summary = form.querySelector(".validation-summary-errors");
+            if (summary) summary.focus();
+        })();
+    </script>
+}

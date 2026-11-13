@@ -1,0 +1,346 @@
+@model IEnumerable<ConcessionItem>
+@{
+    ViewData["Title"] = "Bán Bắp & Nước";
+    int lowStockCount = ViewBag.LowStockCount ?? 0;
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int totalPages = ViewBag.TotalPages ?? 1;
+    int totalItems = ViewBag.TotalItems ?? 0;
+    int pageSize = ViewBag.PageSize ?? 10;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="fw-bold mb-1">Quầy Bắp & Nước (Snack & Drink Sale)</h2>
+        <p class="text-muted mb-0">Chọn số lượng các món cần bán và xác nhận thanh toán.</p>
+    </div>
+    <div>
+        <a asp-action="LowStock" class="btn btn-outline-warning text-dark position-relative">
+            Cảnh báo tồn kho
+            @if (lowStockCount > 0)
+            {
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    @lowStockCount
+                </span>
+            }
+        </a>
+    </div>
+</div>
+
+@if (lowStockCount > 0)
+{
+    <div class="alert alert-warning d-flex align-items-center justify-content-between py-2 mb-3">
+        <div>
+            <strong>Cảnh báo tồn kho:</strong> Hiện có <strong>@lowStockCount</strong> mặt hàng sắp hết hoặc đã hết hàng trong kho.
+        </div>
+        <a asp-action="LowStock" class="btn btn-sm btn-warning text-dark fw-semibold">Xem chi tiết &rarr;</a>
+    </div>
+}
+
+<form asp-action="Sell" method="post" id="concessionForm">
+    @Html.AntiForgeryToken()
+
+    @* Container chứa các món đã chọn ở các trang khác để không bị mất khi chuyển trang *@
+    <div id="hiddenCartContainer"></div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fs-6 fw-semibold">Danh sách món ăn & thức uống</h5>
+            <button type="button" class="btn btn-light btn-sm py-0 px-2 text-danger fw-semibold" id="btnResetCart" style="display:none;" onclick="clearCart()">
+                <i class="bi bi-trash"></i> Xóa các món đã chọn
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 50px;" class="text-center">#</th>
+                        <th>Tên món</th>
+                        <th>Mô tả</th>
+                        <th style="width: 140px;" class="text-end">Đơn giá</th>
+                        <th style="width: 130px;" class="text-center">Tồn kho</th>
+                        <th style="width: 130px;" class="text-center">Số lượng bán</th>
+                        <th style="width: 150px;" class="text-end">Tạm tính</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int index = (currentPage - 1) * pageSize + 1; }
+                    @foreach (var item in Model)
+                    {
+                        bool isOutOfStock = item.StockQuantity <= 0;
+                        <tr>
+                            <td class="text-center text-muted">@(index++)</td>
+                            <td>
+                                <strong>@item.Name</strong>
+                                <input type="hidden" class="page-item-id" name="itemIds" value="@item.ConcessionItemId" />
+                            </td>
+                            <td class="text-muted small">@(item.Description ?? "-")</td>
+                            <td class="text-end fw-semibold">@item.Price.ToString("N0") đ</td>
+                            <td class="text-center">
+                                @if (isOutOfStock)
+                                {
+                                    <span class="badge bg-danger">Hết hàng (0)</span>
+                                }
+                                else if (item.StockQuantity <= item.LowStockThreshold)
+                                {
+                                    <span class="badge bg-warning text-dark">Còn @item.StockQuantity (Sắp hết)</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">Còn @item.StockQuantity</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <input type="number" 
+                                       name="quantities" 
+                                       min="0" 
+                                       max="@item.StockQuantity" 
+                                       value="0" 
+                                       class="form-control form-control-sm text-center qty-input" 
+                                       data-item-id="@item.ConcessionItemId"
+                                       data-name="@item.Name"
+                                       data-price="@item.Price" 
+                                       data-target="subtotal-@item.ConcessionItemId"
+                                       @(isOutOfStock ? "readonly" : "") />
+                            </td>
+                            <td class="text-end fw-bold text-primary" id="subtotal-@item.ConcessionItemId">
+                                0 đ
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (totalPages > 1)
+        {
+            <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 d-print-none">
+                <div class="text-muted small">
+                    Hiển thị @((currentPage - 1) * pageSize + 1) - @(Math.Min(currentPage * pageSize, totalItems)) trên tổng số @totalItems mặt hàng
+                </div>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)">Trước</a>
+                    </li>
+                    @for (int p = 1; p <= totalPages; p++)
+                    {
+                        <li class="page-item @(p == currentPage ? "active" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@p">@p</a>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                        <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)">Sau</a>
+                    </li>
+                </ul>
+            </div>
+        }
+        else if (totalItems > 0)
+        {
+            <div class="card-footer bg-white text-muted small py-2 d-print-none">
+                Tổng số: @totalItems mặt hàng
+            </div>
+        }
+    </div>
+
+    <div class="card shadow-sm border-0 bg-light p-3">
+        <div class="row align-items-center">
+            <div class="col-md-5 mb-3 mb-md-0">
+                <label class="form-label fw-semibold mb-1">Phương thức thanh toán:</label>
+                <div class="d-flex gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="paymentMethod" id="payCash" value="Cash" checked />
+                        <label class="form-check-label" for="payCash">Tiền mặt (Cash)</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="paymentMethod" id="payOnline" value="VNPay_Simulated" />
+                        <label class="form-check-label" for="payOnline">Chuyển khoản (VNPay)</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 text-md-end mb-3 mb-md-0">
+                <div class="text-muted small">Tổng tiền thanh toán:</div>
+                <div class="fs-3 fw-bold text-danger" id="totalAmountDisplay">0 đ</div>
+                <div class="text-muted small" id="cartSummaryText" style="display:none;"></div>
+            </div>
+
+            <div class="col-md-3 text-md-end">
+                <button type="submit" class="btn btn-primary btn-lg w-100" id="btnSubmit" disabled>
+                    Xác nhận bán hàng
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        const CART_STORAGE_KEY = 'prn222_concession_cart';
+
+        // Lấy giỏ hàng từ sessionStorage
+        function getCart() {
+            try {
+                let data = sessionStorage.getItem(CART_STORAGE_KEY);
+                return data ? JSON.parse(data) : {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        // Lưu giỏ hàng vào sessionStorage
+        function saveCart(cart) {
+            try {
+                sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+            } catch (e) {}
+        }
+
+        // Khôi phục giỏ hàng khi tải trang (giữ món đã chọn khi đổi trang)
+        document.addEventListener('DOMContentLoaded', function () {
+            let cart = getCart();
+
+            // Điền lại số lượng cho các món hiển thị trên trang hiện tại
+            document.querySelectorAll('.qty-input').forEach(input => {
+                let itemId = input.dataset.itemId;
+                if (cart[itemId] && cart[itemId].qty > 0) {
+                    input.value = cart[itemId].qty;
+                }
+                input.addEventListener('input', handleQtyChange);
+            });
+
+            syncHiddenCart();
+            updateTotals();
+        });
+
+        function handleQtyChange(e) {
+            let input = e.target;
+            let itemId = input.dataset.itemId;
+            let price = parseFloat(input.dataset.price) || 0;
+            let name = input.dataset.name || '';
+            let qty = parseInt(input.value) || 0;
+            let max = parseInt(input.getAttribute('max')) || 0;
+
+            let cart = getCart();
+            if (qty > 0) {
+                cart[itemId] = { id: itemId, qty: qty, price: price, name: name };
+            } else {
+                delete cart[itemId];
+            }
+            saveCart(cart);
+
+            syncHiddenCart();
+            updateTotals();
+        }
+
+        // Đồng bộ các món đã chọn từ trang khác dưới dạng input hidden để gửi form đầy đủ
+        function syncHiddenCart() {
+            let cart = getCart();
+            let container = document.getElementById('hiddenCartContainer');
+            container.innerHTML = '';
+
+            let currentPageItemIds = Array.from(document.querySelectorAll('.qty-input')).map(i => i.dataset.itemId);
+
+            for (let itemId in cart) {
+                // Nếu món không nằm trên trang hiện tại nhưng đã được chọn ở trang khác
+                if (!currentPageItemIds.includes(itemId) && cart[itemId].qty > 0) {
+                    let idInput = document.createElement('input');
+                    idInput.type = 'hidden';
+                    idInput.name = 'itemIds';
+                    idInput.value = itemId;
+
+                    let qtyInput = document.createElement('input');
+                    qtyInput.type = 'hidden';
+                    qtyInput.name = 'quantities';
+                    qtyInput.value = cart[itemId].qty;
+
+                    container.appendChild(idInput);
+                    container.appendChild(qtyInput);
+                }
+            }
+        }
+
+        function updateTotals() {
+            let grandTotal = 0;
+            let hasError = false;
+            let totalSelectedItems = 0;
+            let cart = getCart();
+
+            // Tính tạm tính trên trang hiện tại và kiểm tra validation lỗi
+            document.querySelectorAll('.qty-input').forEach(input => {
+                let price = parseFloat(input.dataset.price) || 0;
+                let qty = parseInt(input.value) || 0;
+                let max = parseInt(input.getAttribute('max')) || 0;
+                let targetId = input.dataset.target;
+                let subtotalElem = document.getElementById(targetId);
+
+                input.classList.remove('is-invalid');
+
+                if (qty < 0) {
+                    input.classList.add('is-invalid');
+                    hasError = true;
+                    if (subtotalElem) subtotalElem.innerHTML = '<span class="text-danger small">Số âm!</span>';
+                } else if (qty > max) {
+                    input.classList.add('is-invalid');
+                    hasError = true;
+                    if (subtotalElem) subtotalElem.innerHTML = '<span class="text-danger small">Vượt tồn kho!</span>';
+                } else if (qty > 0) {
+                    let lineTotal = price * qty;
+                    if (subtotalElem) subtotalElem.innerText = lineTotal.toLocaleString('vi-VN') + ' đ';
+                } else {
+                    if (subtotalElem) subtotalElem.innerText = '0 đ';
+                }
+            });
+
+            // Tổng tiền tính trên TOÀN BỘ giỏ hàng (bao gồm các trang khác)
+            for (let itemId in cart) {
+                if (cart[itemId].qty > 0) {
+                    grandTotal += (cart[itemId].price * cart[itemId].qty);
+                    totalSelectedItems += cart[itemId].qty;
+                }
+            }
+
+            let totalDisplay = document.getElementById('totalAmountDisplay');
+            let submitBtn = document.getElementById('btnSubmit');
+            let summaryText = document.getElementById('cartSummaryText');
+            let resetBtn = document.getElementById('btnResetCart');
+
+            if (hasError) {
+                totalDisplay.innerHTML = '<span class="text-danger fs-5 fw-bold">Số lượng vượt tồn kho!</span>';
+                submitBtn.disabled = true;
+            } else {
+                totalDisplay.innerText = grandTotal.toLocaleString('vi-VN') + ' đ';
+                submitBtn.disabled = grandTotal <= 0;
+            }
+
+            if (totalSelectedItems > 0) {
+                summaryText.style.display = 'block';
+                summaryText.innerText = `(Đã chọn ${totalSelectedItems} món trên các trang)`;
+                if (resetBtn) resetBtn.style.display = 'inline-block';
+            } else {
+                summaryText.style.display = 'none';
+                if (resetBtn) resetBtn.style.display = 'none';
+            }
+        }
+
+        // Xóa giỏ hàng
+        function clearCart() {
+            sessionStorage.removeItem(CART_STORAGE_KEY);
+            document.querySelectorAll('.qty-input').forEach(input => {
+                input.value = 0;
+            });
+            syncHiddenCart();
+            updateTotals();
+        }
+
+        // Hiển thị trạng thái đang xử lý khi gửi đơn.
+        // Lưu ý: KHÔNG xóa sessionStorage tại đây để nếu giao dịch thất bại (hết kho, concurrency, validation),
+        // giỏ hàng vẫn còn nguyên cho thu ngân sửa lại. Giỏ hàng chỉ được xóa khi xác nhận bán thành công tại Receipt.cshtml.
+        document.getElementById('concessionForm').addEventListener('submit', function (e) {
+            let submitBtn = document.getElementById('btnSubmit');
+            if (submitBtn.disabled) {
+                e.preventDefault();
+                return false;
+            }
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý bán hàng...';
+        });
+    </script>
+}

@@ -1,0 +1,387 @@
+@model MovieCatalogViewModel
+@using PRN222_CinemaManagement.Constants
+@{
+    ViewData["Title"] = "Phim đang chiếu";
+    var showDateQuery = Model.Filter.ShowDate?.ToString("yyyy-MM-dd");
+    var onlyWithScreeningsQuery = Model.Filter.OnlyWithScreenings ? "true" : null;
+    var sortByQuery = Model.Filter.SortBy == BookingConstants.MovieSortOptions.TitleAsc ? null : Model.Filter.SortBy;
+    var pageSizeQuery = Model.Filter.PageSize == BookingConstants.DefaultMoviePageSize ? (int?)null : Model.Filter.PageSize;
+
+    string AgeBadgeClass(string rating) => rating switch
+    {
+        "P" or "K" => "bg-success",
+        "T13" => "bg-info text-dark",
+        "T16" => "bg-warning text-dark",
+        "T18" => "bg-danger",
+        _ => "bg-secondary"
+    };
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <div>
+        <p class="text-uppercase text-muted small mb-1">Cinema Management</p>
+        <h1 class="mb-1">Phim đang chiếu</h1>
+        <p class="text-muted mb-0">Chọn phim, chọn suất và đặt chỗ cho buổi xem của bạn.</p>
+    </div>
+    <span class="badge bg-dark-subtle text-dark-emphasis border fs-6 fw-normal px-3 py-2">
+        @Model.TotalShowingCount phim đang mở bán
+    </span>
+</div>
+
+<form method="get" asp-action="Index" id="movie-filter-form" class="card shadow-sm border-0 movie-filter-card mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-lg-4">
+                <label for="movie-search" class="form-label small fw-semibold text-muted mb-1">Tìm kiếm phim</label>
+                <input type="search"
+                       id="movie-search"
+                       name="Search"
+                       value="@Model.Filter.Search"
+                       class="form-control"
+                       placeholder="Tên phim, nội dung, thể loại..."
+                       autocomplete="off" />
+            </div>
+
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="movie-genre" class="form-label small fw-semibold text-muted mb-1">Thể loại</label>
+                <select id="movie-genre" name="GenreId" class="form-select" data-auto-submit="true">
+                    <option value="">Tất cả thể loại</option>
+                    @foreach (var genre in Model.Genres)
+                    {
+                        <option value="@genre.GenreId" selected="@(Model.Filter.GenreId == genre.GenreId)">
+                            @genre.GenreName (@genre.MovieCount)
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="movie-rating" class="form-label small fw-semibold text-muted mb-1">Độ tuổi</label>
+                <select id="movie-rating" name="AgeRating" class="form-select" data-auto-submit="true">
+                    <option value="">Tất cả độ tuổi</option>
+                    @foreach (var rating in Model.AgeRatings)
+                    {
+                        <option value="@rating" selected="@string.Equals(Model.Filter.AgeRating, rating, StringComparison.OrdinalIgnoreCase)">
+                            @rating
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="movie-date" class="form-label small fw-semibold text-muted mb-1">Ngày chiếu</label>
+                <select id="movie-date" name="ShowDate" class="form-select" data-auto-submit="true">
+                    <option value="">Tất cả ngày chiếu</option>
+                    @foreach (var dateOption in Model.ShowDates)
+                    {
+                        <option value="@dateOption.Date.ToString("yyyy-MM-dd")" selected="@(Model.Filter.ShowDate == dateOption.Date)">
+                            @dateOption.Label
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="movie-sort" class="form-label small fw-semibold text-muted mb-1">Sắp xếp</label>
+                <select id="movie-sort" name="SortBy" class="form-select" data-auto-submit="true">
+                    <option value="@BookingConstants.MovieSortOptions.TitleAsc" selected="@(Model.Filter.SortBy == BookingConstants.MovieSortOptions.TitleAsc)">Tên phim (A–Z)</option>
+                    <option value="@BookingConstants.MovieSortOptions.TitleDesc" selected="@(Model.Filter.SortBy == BookingConstants.MovieSortOptions.TitleDesc)">Tên phim (Z–A)</option>
+                    <option value="@BookingConstants.MovieSortOptions.Newest" selected="@(Model.Filter.SortBy == BookingConstants.MovieSortOptions.Newest)">Mới phát hành</option>
+                    <option value="@BookingConstants.MovieSortOptions.DurationAsc" selected="@(Model.Filter.SortBy == BookingConstants.MovieSortOptions.DurationAsc)">Thời lượng ngắn nhất</option>
+                    <option value="@BookingConstants.MovieSortOptions.DurationDesc" selected="@(Model.Filter.SortBy == BookingConstants.MovieSortOptions.DurationDesc)">Thời lượng dài nhất</option>
+                    <option value="@BookingConstants.MovieSortOptions.ScreeningsDesc" selected="@(Model.Filter.SortBy == BookingConstants.MovieSortOptions.ScreeningsDesc)">Nhiều suất chiếu nhất</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
+            @if (Model.Genres.Count > 0)
+            {
+                <div class="d-flex flex-wrap align-items-center gap-1" role="group" aria-label="Lọc nhanh theo thể loại">
+                    <a asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       data-genre-chip=""
+                       class="btn btn-sm rounded-pill @(Model.Filter.GenreId == null ? "btn-primary" : "btn-outline-secondary")">
+                        Tất cả
+                    </a>
+                    @foreach (var genre in Model.Genres)
+                    {
+                        var isSelected = Model.Filter.GenreId == genre.GenreId;
+                        <a asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@genre.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                           data-genre-chip="@genre.GenreId"
+                           class="btn btn-sm rounded-pill @(isSelected ? "btn-primary" : "btn-outline-secondary")">
+                            @genre.GenreName <span class="opacity-75">(@genre.MovieCount)</span>
+                        </a>
+                    }
+                </div>
+            }
+
+            <div class="d-flex flex-wrap align-items-center gap-3 ms-auto">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           id="OnlyWithScreenings"
+                           name="OnlyWithScreenings"
+                           value="true"
+                           checked="@Model.Filter.OnlyWithScreenings"
+                           data-auto-submit="true" />
+                    <label class="form-check-label small" for="OnlyWithScreenings">Chỉ phim còn suất sắp tới</label>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm px-3">Tìm phim</button>
+                    @if (Model.Filter.HasActiveFilters)
+                    {
+                        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">Xóa bộ lọc</a>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@if (Model.TotalShowingCount > 0)
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <p class="text-muted small mb-0">
+            @if (Model.Pagination.TotalItems > 0)
+            {
+                <span>Hiển thị <strong>@Model.Pagination.StartItem–@Model.Pagination.EndItem</strong> / <strong>@Model.Pagination.TotalItems</strong> phim phù hợp (Tổng @Model.TotalShowingCount phim đang chiếu)</span>
+            }
+            else
+            {
+                <span>Không có phim phù hợp trong tổng số <strong>@Model.TotalShowingCount</strong> phim đang chiếu</span>
+            }
+        </p>
+
+        @if (Model.Filter.HasActiveFilters)
+        {
+            <div class="d-flex flex-wrap align-items-center gap-2 small">
+                @if (!string.IsNullOrWhiteSpace(Model.Filter.Search))
+                {
+                    <a asp-action="Index"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       class="badge rounded-pill text-bg-light border text-decoration-none text-dark filter-chip-remove">
+                        Từ khóa: "@Model.Filter.Search" ×
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.SelectedGenreName))
+                {
+                    <a asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       class="badge rounded-pill text-bg-light border text-decoration-none text-dark filter-chip-remove">
+                        Thể loại: @Model.SelectedGenreName ×
+                    </a>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.Filter.AgeRating))
+                {
+                    <a asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       class="badge rounded-pill text-bg-light border text-decoration-none text-dark filter-chip-remove">
+                        Độ tuổi: @Model.Filter.AgeRating ×
+                    </a>
+                }
+                @if (Model.Filter.ShowDate.HasValue)
+                {
+                    <a asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       class="badge rounded-pill text-bg-light border text-decoration-none text-dark filter-chip-remove">
+                        Ngày chiếu: @Model.Filter.ShowDate.Value.ToString("dd/MM/yyyy") ×
+                    </a>
+                }
+                @if (Model.Filter.OnlyWithScreenings)
+                {
+                    <a asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       class="badge rounded-pill text-bg-light border text-decoration-none text-dark filter-chip-remove">
+                        Còn suất sắp tới ×
+                    </a>
+                }
+            </div>
+        }
+    </div>
+}
+
+@if (Model.TotalShowingCount == 0)
+{
+    <div class="alert alert-info">Hiện chưa có phim mở bán. Vui lòng quay lại sau.</div>
+}
+else if (Model.Movies.Count == 0)
+{
+    <div class="alert alert-light border text-center py-5">
+        <p class="h5 mb-2">Không tìm thấy phim phù hợp</p>
+        <p class="text-muted mb-3">Thử thay đổi từ khóa tìm kiếm hoặc bỏ bớt điều kiện lọc.</p>
+        <a asp-action="Index" class="btn btn-primary btn-sm">Xem tất cả phim đang chiếu</a>
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        @foreach (var movie in Model.Movies)
+        {
+            <div class="col-12 col-sm-6 col-lg-4">
+                <article class="card h-100 movie-card shadow-sm">
+                    @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                    {
+                        <img src="@movie.PosterUrl" alt="Poster phim @movie.Title" class="card-img-top movie-poster" loading="lazy" />
+                    }
+                    else
+                    {
+                        <div class="movie-poster movie-placeholder" aria-hidden="true">CINEMA</div>
+                    }
+                    <div class="card-body d-flex flex-column align-items-start">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2 w-100">
+                            <span class="badge @AgeBadgeClass(movie.AgeRating)">@movie.AgeRating</span>
+                            <span class="small text-muted">@movie.DurationMinutes phút</span>
+                            <span class="ms-auto badge @(movie.UpcomingScreeningCount > 0 ? "bg-primary-subtle text-primary-emphasis" : "bg-light text-muted border")">
+                                @(movie.UpcomingScreeningCount > 0 ? $"{movie.UpcomingScreeningCount} suất sắp tới" : "Chưa có suất")
+                            </span>
+                        </div>
+                        <h2 class="h5 mb-2">@movie.Title</h2>
+                        @if (movie.Genres.Count > 0)
+                        {
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                @foreach (var genreName in movie.Genres)
+                                {
+                                    <span class="badge rounded-pill text-bg-light border fw-normal">@genreName</span>
+                                }
+                            </div>
+                        }
+                        <p class="movie-description text-muted small mb-3">@movie.Description</p>
+                        <a asp-action="Details" asp-route-id="@movie.MovieId" class="btn btn-primary mt-auto w-100">Xem lịch chiếu</a>
+                    </div>
+                </article>
+            </div>
+        }
+    </div>
+
+    @if (Model.Pagination.TotalPages > 1)
+    {
+        var pageNumbers = Model.Pagination.GetPageNumbers();
+        <nav aria-label="Phân trang danh sách phim" class="mt-4">
+            <ul class="pagination justify-content-center flex-wrap mb-0">
+                <li class="page-item @(Model.Pagination.HasPreviousPage ? "" : "disabled")">
+                    <a class="page-link"
+                       asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       asp-route-PageSize="@pageSizeQuery"
+                       asp-route-Page="@(Model.Pagination.Page - 1)"
+                       aria-label="Trang trước">
+                        « Trước
+                    </a>
+                </li>
+
+                @if (pageNumbers[0] > 1)
+                {
+                    <li class="page-item">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@Model.Filter.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                           asp-route-PageSize="@pageSizeQuery"
+                           asp-route-Page="1">1</a>
+                    </li>
+                    @if (pageNumbers[0] > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                }
+
+                @foreach (var p in pageNumbers)
+                {
+                    <li class="page-item @(p == Model.Pagination.Page ? "active" : "")" aria-current="@(p == Model.Pagination.Page ? "page" : null)">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@Model.Filter.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                           asp-route-PageSize="@pageSizeQuery"
+                           asp-route-Page="@p">@p</a>
+                    </li>
+                }
+
+                @if (pageNumbers[^1] < Model.Pagination.TotalPages)
+                {
+                    @if (pageNumbers[^1] < Model.Pagination.TotalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    }
+                    <li class="page-item">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-Search="@Model.Filter.Search"
+                           asp-route-GenreId="@Model.Filter.GenreId"
+                           asp-route-AgeRating="@Model.Filter.AgeRating"
+                           asp-route-ShowDate="@showDateQuery"
+                           asp-route-SortBy="@sortByQuery"
+                           asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                           asp-route-PageSize="@pageSizeQuery"
+                           asp-route-Page="@Model.Pagination.TotalPages">@Model.Pagination.TotalPages</a>
+                    </li>
+                }
+
+                <li class="page-item @(Model.Pagination.HasNextPage ? "" : "disabled")">
+                    <a class="page-link"
+                       asp-action="Index"
+                       asp-route-Search="@Model.Filter.Search"
+                       asp-route-GenreId="@Model.Filter.GenreId"
+                       asp-route-AgeRating="@Model.Filter.AgeRating"
+                       asp-route-ShowDate="@showDateQuery"
+                       asp-route-SortBy="@sortByQuery"
+                       asp-route-OnlyWithScreenings="@onlyWithScreeningsQuery"
+                       asp-route-PageSize="@pageSizeQuery"
+                       asp-route-Page="@(Model.Pagination.Page + 1)"
+                       aria-label="Trang sau">
+                        Sau »
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    }
+}
+
+@section Scripts {
+    <script src="~/js/booking.js" asp-append-version="true"></script>
+}
