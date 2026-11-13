@@ -1,4 +1,4 @@
-﻿IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
 BEGIN
     CREATE TABLE [__EFMigrationsHistory] (
         [MigrationId] nvarchar(150) NOT NULL,
@@ -140,8 +140,8 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE TABLE [Showtimes] (
-        [ShowtimeId] int NOT NULL IDENTITY,
+    CREATE TABLE [Screenings] (
+        [ScreeningId] int NOT NULL IDENTITY,
         [MovieId] int NOT NULL,
         [AuditoriumId] int NOT NULL,
         [StartAt] datetime2(0) NOT NULL,
@@ -150,14 +150,14 @@ BEGIN
         [BasePrice] decimal(18,2) NOT NULL,
         [Status] varchar(20) NOT NULL DEFAULT 'Scheduled',
         [RowVersion] rowversion NOT NULL,
-        CONSTRAINT [PK_Showtimes] PRIMARY KEY ([ShowtimeId]),
-        CONSTRAINT [UQ_Showtimes_Room] UNIQUE ([ShowtimeId], [AuditoriumId]),
-        CONSTRAINT [CK_Showtimes_Cleanup] CHECK ([CleanupMinutes] BETWEEN 0 AND 120),
-        CONSTRAINT [CK_Showtimes_Price] CHECK ([BasePrice] >= 0),
-        CONSTRAINT [CK_Showtimes_Status] CHECK ([Status] IN ('Scheduled','Ongoing','Finished','Cancelled')),
-        CONSTRAINT [CK_Showtimes_TimeRange] CHECK ([EndAt] > [StartAt]),
-        CONSTRAINT [FK_Showtimes_Auditoriums_AuditoriumId] FOREIGN KEY ([AuditoriumId]) REFERENCES [Auditoriums] ([AuditoriumId]) ON DELETE NO ACTION,
-        CONSTRAINT [FK_Showtimes_Movies_MovieId] FOREIGN KEY ([MovieId]) REFERENCES [Movies] ([MovieId]) ON DELETE NO ACTION
+        CONSTRAINT [PK_Screenings] PRIMARY KEY ([ScreeningId]),
+        CONSTRAINT [UQ_Screenings_Room] UNIQUE ([ScreeningId], [AuditoriumId]),
+        CONSTRAINT [CK_Screenings_Cleanup] CHECK ([CleanupMinutes] = 15),
+        CONSTRAINT [CK_Screenings_Price] CHECK ([BasePrice] >= 0),
+        CONSTRAINT [CK_Screenings_Status] CHECK ([Status] IN ('Scheduled','Ongoing','Finished','Cancelled')),
+        CONSTRAINT [CK_Screenings_TimeRange] CHECK ([EndAt] > [StartAt]),
+        CONSTRAINT [FK_Screenings_Auditoriums_AuditoriumId] FOREIGN KEY ([AuditoriumId]) REFERENCES [Auditoriums] ([AuditoriumId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Screenings_Movies_MovieId] FOREIGN KEY ([MovieId]) REFERENCES [Movies] ([MovieId]) ON DELETE NO ACTION
     );
 END;
 GO
@@ -277,7 +277,7 @@ BEGIN
         [BookingCode] varchar(40) NOT NULL,
         [CustomerId] int NULL,
         [StaffId] int NULL,
-        [ShowtimeId] int NOT NULL,
+        [ScreeningId] int NOT NULL,
         [BookingDate] datetime2(0) NOT NULL DEFAULT (SYSUTCDATETIME()),
         [ExpiresAt] datetime2(0) NOT NULL,
         [TotalAmount] decimal(18,2) NOT NULL DEFAULT 0.0,
@@ -285,14 +285,14 @@ BEGIN
         [Status] varchar(20) NOT NULL DEFAULT 'Pending',
         [RowVersion] rowversion NOT NULL,
         CONSTRAINT [PK_Bookings] PRIMARY KEY ([BookingId]),
-        CONSTRAINT [UQ_Bookings_Show] UNIQUE ([BookingId], [ShowtimeId]),
+        CONSTRAINT [UQ_Bookings_Show] UNIQUE ([BookingId], [ScreeningId]),
         CONSTRAINT [CK_Bookings_Channel] CHECK ([BookingChannel] IN ('Online','Counter')),
         CONSTRAINT [CK_Bookings_ChannelActors] CHECK (([BookingChannel] = 'Online' AND [CustomerId] IS NOT NULL AND [StaffId] IS NULL) OR ([BookingChannel] = 'Counter' AND [StaffId] IS NOT NULL)),
         CONSTRAINT [CK_Bookings_Expiry] CHECK ([ExpiresAt] > [BookingDate]),
         CONSTRAINT [CK_Bookings_Status] CHECK ([Status] IN ('Pending','Confirmed','Cancelled','Expired','Refunded')),
         CONSTRAINT [CK_Bookings_Total] CHECK ([TotalAmount] >= 0),
         CONSTRAINT [FK_Bookings_Customers_CustomerId] FOREIGN KEY ([CustomerId]) REFERENCES [Customers] ([CustomerId]) ON DELETE NO ACTION,
-        CONSTRAINT [FK_Bookings_Showtimes_ShowtimeId] FOREIGN KEY ([ShowtimeId]) REFERENCES [Showtimes] ([ShowtimeId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Bookings_Screenings_ScreeningId] FOREIGN KEY ([ScreeningId]) REFERENCES [Screenings] ([ScreeningId]) ON DELETE NO ACTION,
         CONSTRAINT [FK_Bookings_Staffs_StaffId] FOREIGN KEY ([StaffId]) REFERENCES [Staffs] ([StaffId]) ON DELETE NO ACTION
     );
 END;
@@ -354,9 +354,9 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE TABLE [ShowtimeSeats] (
-        [ShowtimeSeatId] int NOT NULL IDENTITY,
-        [ShowtimeId] int NOT NULL,
+    CREATE TABLE [ScreeningSeats] (
+        [ScreeningSeatId] int NOT NULL IDENTITY,
+        [ScreeningId] int NOT NULL,
         [SeatId] int NOT NULL,
         [AuditoriumId] int NOT NULL,
         [Price] decimal(18,2) NOT NULL,
@@ -364,15 +364,15 @@ BEGIN
         [HeldByBookingId] int NULL,
         [HoldExpiresAt] datetime2(0) NULL,
         [RowVersion] rowversion NOT NULL,
-        CONSTRAINT [PK_ShowtimeSeats] PRIMARY KEY ([ShowtimeSeatId]),
-        CONSTRAINT [UQ_ShowtimeSeats_Show] UNIQUE ([ShowtimeSeatId], [ShowtimeId]),
-        CONSTRAINT [CK_ShowtimeSeats_HeldState] CHECK (([Status] = 'Held' AND [HeldByBookingId] IS NOT NULL AND [HoldExpiresAt] IS NOT NULL) OR ([Status] <> 'Held' AND [HeldByBookingId] IS NULL AND [HoldExpiresAt] IS NULL)),
-        CONSTRAINT [CK_ShowtimeSeats_Price] CHECK ([Price] >= 0),
-        CONSTRAINT [CK_ShowtimeSeats_Status] CHECK ([Status] IN ('Available','Held','Sold','Blocked')),
-        CONSTRAINT [FK_ShowtimeSeats_Auditoriums_AuditoriumId] FOREIGN KEY ([AuditoriumId]) REFERENCES [Auditoriums] ([AuditoriumId]) ON DELETE CASCADE,
-        CONSTRAINT [FK_ShowtimeSeats_Bookings_HeldByBookingId_ShowtimeId] FOREIGN KEY ([HeldByBookingId], [ShowtimeId]) REFERENCES [Bookings] ([BookingId], [ShowtimeId]) ON DELETE NO ACTION,
-        CONSTRAINT [FK_ShowtimeSeats_Seats_SeatId_AuditoriumId] FOREIGN KEY ([SeatId], [AuditoriumId]) REFERENCES [Seats] ([SeatId], [AuditoriumId]) ON DELETE NO ACTION,
-        CONSTRAINT [FK_ShowtimeSeats_Showtimes_ShowtimeId_AuditoriumId] FOREIGN KEY ([ShowtimeId], [AuditoriumId]) REFERENCES [Showtimes] ([ShowtimeId], [AuditoriumId]) ON DELETE NO ACTION
+        CONSTRAINT [PK_ScreeningSeats] PRIMARY KEY ([ScreeningSeatId]),
+        CONSTRAINT [UQ_ScreeningSeats_Show] UNIQUE ([ScreeningSeatId], [ScreeningId]),
+        CONSTRAINT [CK_ScreeningSeats_HeldState] CHECK (([Status] = 'Held' AND [HeldByBookingId] IS NOT NULL AND [HoldExpiresAt] IS NOT NULL) OR ([Status] <> 'Held' AND [HeldByBookingId] IS NULL AND [HoldExpiresAt] IS NULL)),
+        CONSTRAINT [CK_ScreeningSeats_Price] CHECK ([Price] >= 0),
+        CONSTRAINT [CK_ScreeningSeats_Status] CHECK ([Status] IN ('Available','Held','Sold','Blocked')),
+        CONSTRAINT [FK_ScreeningSeats_Auditoriums_AuditoriumId] FOREIGN KEY ([AuditoriumId]) REFERENCES [Auditoriums] ([AuditoriumId]) ON DELETE CASCADE,
+        CONSTRAINT [FK_ScreeningSeats_Bookings_HeldByBookingId_ScreeningId] FOREIGN KEY ([HeldByBookingId], [ScreeningId]) REFERENCES [Bookings] ([BookingId], [ScreeningId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_ScreeningSeats_Seats_SeatId_AuditoriumId] FOREIGN KEY ([SeatId], [AuditoriumId]) REFERENCES [Seats] ([SeatId], [AuditoriumId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_ScreeningSeats_Screenings_ScreeningId_AuditoriumId] FOREIGN KEY ([ScreeningId], [AuditoriumId]) REFERENCES [Screenings] ([ScreeningId], [AuditoriumId]) ON DELETE NO ACTION
     );
 END;
 GO
@@ -386,8 +386,8 @@ BEGIN
         [TicketId] int NOT NULL IDENTITY,
         [TicketCode] varchar(50) NOT NULL,
         [BookingId] int NOT NULL,
-        [ShowtimeSeatId] int NOT NULL,
-        [ShowtimeId] int NOT NULL,
+        [ScreeningSeatId] int NOT NULL,
+        [ScreeningId] int NOT NULL,
         [Price] decimal(18,2) NOT NULL,
         [Status] varchar(20) NOT NULL DEFAULT 'Valid',
         [IssuedAt] datetime2(0) NOT NULL DEFAULT (SYSUTCDATETIME()),
@@ -396,9 +396,9 @@ BEGIN
         CONSTRAINT [CK_Tickets_CheckInState] CHECK (([Status] = 'CheckedIn' AND [CheckedInAt] IS NOT NULL) OR ([Status] <> 'CheckedIn' AND [CheckedInAt] IS NULL)),
         CONSTRAINT [CK_Tickets_Price] CHECK ([Price] >= 0),
         CONSTRAINT [CK_Tickets_Status] CHECK ([Status] IN ('Valid','CheckedIn','Cancelled')),
-        CONSTRAINT [FK_Tickets_Bookings_BookingId_ShowtimeId] FOREIGN KEY ([BookingId], [ShowtimeId]) REFERENCES [Bookings] ([BookingId], [ShowtimeId]) ON DELETE NO ACTION,
-        CONSTRAINT [FK_Tickets_ShowtimeSeats_ShowtimeSeatId_ShowtimeId] FOREIGN KEY ([ShowtimeSeatId], [ShowtimeId]) REFERENCES [ShowtimeSeats] ([ShowtimeSeatId], [ShowtimeId]) ON DELETE NO ACTION,
-        CONSTRAINT [FK_Tickets_Showtimes_ShowtimeId] FOREIGN KEY ([ShowtimeId]) REFERENCES [Showtimes] ([ShowtimeId]) ON DELETE CASCADE
+        CONSTRAINT [FK_Tickets_Bookings_BookingId_ScreeningId] FOREIGN KEY ([BookingId], [ScreeningId]) REFERENCES [Bookings] ([BookingId], [ScreeningId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Tickets_ScreeningSeats_ScreeningSeatId_ScreeningId] FOREIGN KEY ([ScreeningSeatId], [ScreeningId]) REFERENCES [ScreeningSeats] ([ScreeningSeatId], [ScreeningId]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Tickets_Screenings_ScreeningId] FOREIGN KEY ([ScreeningId]) REFERENCES [Screenings] ([ScreeningId]) ON DELETE CASCADE
     );
 END;
 GO
@@ -538,7 +538,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_Bookings_Show] ON [Bookings] ([ShowtimeId]);
+    CREATE INDEX [IX_Bookings_Show] ON [Bookings] ([ScreeningId]);
 END;
 GO
 
@@ -682,7 +682,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_Showtimes_MovieStart] ON [Showtimes] ([MovieId], [StartAt]);
+    CREATE INDEX [IX_Screenings_MovieStart] ON [Screenings] ([MovieId], [StartAt]);
 END;
 GO
 
@@ -691,7 +691,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_Showtimes_RoomStart] ON [Showtimes] ([AuditoriumId], [StartAt]) INCLUDE ([EndAt], [Status]);
+    CREATE INDEX [IX_Screenings_RoomStart] ON [Screenings] ([AuditoriumId], [StartAt]) INCLUDE ([EndAt], [Status]);
 END;
 GO
 
@@ -700,7 +700,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_AuditoriumId] ON [ShowtimeSeats] ([AuditoriumId]);
+    CREATE INDEX [IX_ScreeningSeats_AuditoriumId] ON [ScreeningSeats] ([AuditoriumId]);
 END;
 GO
 
@@ -709,7 +709,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_Booking] ON [ShowtimeSeats] ([HeldByBookingId]);
+    CREATE INDEX [IX_ScreeningSeats_Booking] ON [ScreeningSeats] ([HeldByBookingId]);
 END;
 GO
 
@@ -718,7 +718,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_Expiry] ON [ShowtimeSeats] ([Status], [HoldExpiresAt]);
+    CREATE INDEX [IX_ScreeningSeats_Expiry] ON [ScreeningSeats] ([Status], [HoldExpiresAt]);
 END;
 GO
 
@@ -727,7 +727,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_HeldByBookingId_ShowtimeId] ON [ShowtimeSeats] ([HeldByBookingId], [ShowtimeId]);
+    CREATE INDEX [IX_ScreeningSeats_HeldByBookingId_ScreeningId] ON [ScreeningSeats] ([HeldByBookingId], [ScreeningId]);
 END;
 GO
 
@@ -736,7 +736,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_PhysicalSeat] ON [ShowtimeSeats] ([SeatId]);
+    CREATE INDEX [IX_ScreeningSeats_PhysicalSeat] ON [ScreeningSeats] ([SeatId]);
 END;
 GO
 
@@ -745,7 +745,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_SeatId_AuditoriumId] ON [ShowtimeSeats] ([SeatId], [AuditoriumId]);
+    CREATE INDEX [IX_ScreeningSeats_SeatId_AuditoriumId] ON [ScreeningSeats] ([SeatId], [AuditoriumId]);
 END;
 GO
 
@@ -754,7 +754,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_ShowtimeSeats_ShowtimeId_AuditoriumId] ON [ShowtimeSeats] ([ShowtimeId], [AuditoriumId]);
+    CREATE INDEX [IX_ScreeningSeats_ScreeningId_AuditoriumId] ON [ScreeningSeats] ([ScreeningId], [AuditoriumId]);
 END;
 GO
 
@@ -763,7 +763,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE UNIQUE INDEX [UQ_ShowtimeSeats_Seat] ON [ShowtimeSeats] ([ShowtimeId], [SeatId]);
+    CREATE UNIQUE INDEX [UQ_ScreeningSeats_Seat] ON [ScreeningSeats] ([ScreeningId], [SeatId]);
 END;
 GO
 
@@ -799,7 +799,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_Tickets_BookingId_ShowtimeId] ON [Tickets] ([BookingId], [ShowtimeId]);
+    CREATE INDEX [IX_Tickets_BookingId_ScreeningId] ON [Tickets] ([BookingId], [ScreeningId]);
 END;
 GO
 
@@ -808,7 +808,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_Tickets_ShowtimeId] ON [Tickets] ([ShowtimeId]);
+    CREATE INDEX [IX_Tickets_ScreeningId] ON [Tickets] ([ScreeningId]);
 END;
 GO
 
@@ -817,7 +817,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    CREATE INDEX [IX_Tickets_ShowtimeSeatId_ShowtimeId] ON [Tickets] ([ShowtimeSeatId], [ShowtimeId]);
+    CREATE INDEX [IX_Tickets_ScreeningSeatId_ScreeningId] ON [Tickets] ([ScreeningSeatId], [ScreeningId]);
 END;
 GO
 
@@ -835,7 +835,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261102231823_InitialCreate'
 )
 BEGIN
-    EXEC(N'CREATE UNIQUE INDEX [UX_Tickets_ActiveSeat] ON [Tickets] ([ShowtimeSeatId]) WHERE [Status] <> ''Cancelled''');
+    EXEC(N'CREATE UNIQUE INDEX [UX_Tickets_ActiveSeat] ON [Tickets] ([ScreeningSeatId]) WHERE [Status] <> ''Cancelled''');
 END;
 GO
 

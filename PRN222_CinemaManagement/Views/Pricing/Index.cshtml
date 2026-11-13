@@ -1,0 +1,94 @@
+@model IEnumerable<PRN222_CinemaManagement.Models.Entities.SeatType>
+
+@{
+    ViewData["Title"] = "Thiết lập giá vé";
+    decimal basePrice = ViewBag.SampleBasePrice != null ? (decimal)ViewBag.SampleBasePrice : 80000m;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Quy tắc tính giá vé</h3>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Danh sách loại ghế & hệ số giá -->
+    <div class="col-md-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold">Danh sách loại ghế & Hệ số giá</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-bordered table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Loại ghế</th>
+                            <th>Mô tả</th>
+                            <th>Hệ số giá</th>
+                            <th>Trạng thái</th>
+                            <th style="width: 100px;" class="text-center">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td><strong>@item.TypeName</strong></td>
+                                <td class="text-muted small">@item.Description</td>
+                                <td>
+                                    <span class="badge bg-info text-dark">x @item.PriceMultiplier.ToString("0.00")</span>
+                                </td>
+                                <td>
+                                    @(item.IsActive ? "Đang áp dụng" : "Tạm ngưng")
+                                </td>
+                                <td class="text-center">
+                                    <a asp-action="EditSeatType" asp-route-id="@item.SeatTypeId" class="btn btn-sm btn-outline-primary">
+                                        Sửa
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Bảng mô phỏng giá vé theo công thức -->
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 fw-bold">Tính thử giá vé theo công thức</h5>
+                <small class="text-muted">Giá vé = Giá cơ sở × Hệ số loại ghế</small>
+            </div>
+            <div class="card-body">
+                <form method="get" asp-action="Index" class="mb-3">
+                    <label class="form-label fw-bold">Giá cơ sở suất chiếu (VNĐ):</label>
+                    <div class="input-group">
+                        <input type="number" name="sampleBasePrice" class="form-control" value="@basePrice" step="5000" min="10000" />
+                        <button type="submit" class="btn btn-primary">Tính</button>
+                    </div>
+                </form>
+
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Loại ghế</th>
+                            <th>Hệ số</th>
+                            <th>Giá thành tiền</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.Where(s => s.IsActive))
+                        {
+                            var total = basePrice * item.PriceMultiplier;
+                            <tr>
+                                <td>@item.TypeName</td>
+                                <td>x @item.PriceMultiplier.ToString("0.00")</td>
+                                <td class="fw-bold text-success">@total.ToString("N0") đ</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

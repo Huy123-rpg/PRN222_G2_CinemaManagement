@@ -1,0 +1,13 @@
+@using Microsoft.AspNetCore.Http
+@{
+    ViewData["Title"] = "Dashboard";
+    var role = Context.Session.GetString("Role");
+    var fullName = Context.Session.GetString("FullName");
+}
+
+<section class="operations-welcome">
+    <p class="operations-welcome-eyebrow">TỔNG QUAN VẬN HÀNH</p>
+    <h1>Xin chào, @fullName</h1>
+    <p>Chọn một mục trong thanh điều hướng bên trái để tiếp tục công việc.</p>
+    <div class="operations-welcome-role"><span class="operations-status-dot"></span>Đăng nhập với vai trò @((role == "CinemaManager") ? "Quản lý rạp" : role == "Admin" ? "Quản trị viên" : "Nhân viên")</div>
+</section>

@@ -17,13 +17,15 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
     public DbSet<Auditorium> Auditoriums => Set<Auditorium>();
     public DbSet<SeatType> SeatTypes => Set<SeatType>();
     public DbSet<Seat> Seats => Set<Seat>();
-    public DbSet<Showtime> Showtimes => Set<Showtime>();
+    public DbSet<Screening> Screenings => Set<Screening>();
     public DbSet<Booking> Bookings => Set<Booking>();
-    public DbSet<ShowtimeSeat> ShowtimeSeats => Set<ShowtimeSeat>();
+    public DbSet<ScreeningSeat> ScreeningSeats => Set<ScreeningSeat>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<ConcessionItem> ConcessionItems => Set<ConcessionItem>();
     public DbSet<BookingConcession> BookingConcessions => Set<BookingConcession>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<ConcessionSale> ConcessionSales => Set<ConcessionSale>();
+    public DbSet<ConcessionSaleItem> ConcessionSaleItems => Set<ConcessionSaleItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -251,10 +253,10 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
             entity.HasIndex(e => e.SeatTypeId).HasDatabaseName("IX_Seats_Type");
         });
 
-        // 13. Showtimes
-        modelBuilder.Entity<Showtime>(entity =>
+        // 13. Screenings
+        modelBuilder.Entity<Screening>(entity =>
         {
-            entity.HasKey(e => e.ShowtimeId);
+            entity.HasKey(e => e.ScreeningId);
             entity.Property(e => e.StartAt).HasPrecision(0);
             entity.Property(e => e.EndAt).HasPrecision(0);
             entity.Property(e => e.CleanupMinutes).HasDefaultValue(15);
@@ -262,31 +264,31 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
             entity.Property(e => e.Status).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Scheduled");
             entity.Property(e => e.RowVersion).IsRowVersion();
 
-            entity.HasAlternateKey(e => new { e.ShowtimeId, e.AuditoriumId })
-                .HasName("UQ_Showtimes_Room");
+            entity.HasAlternateKey(e => new { e.ScreeningId, e.AuditoriumId })
+                .HasName("UQ_Screenings_Room");
 
             entity.ToTable(t =>
             {
-                t.HasCheckConstraint("CK_Showtimes_Cleanup", "[CleanupMinutes] BETWEEN 0 AND 120");
-                t.HasCheckConstraint("CK_Showtimes_Price", "[BasePrice] >= 0");
-                t.HasCheckConstraint("CK_Showtimes_Status", "[Status] IN ('Scheduled','Ongoing','Finished','Cancelled')");
-                t.HasCheckConstraint("CK_Showtimes_TimeRange", "[EndAt] > [StartAt]");
+                t.HasCheckConstraint("CK_Screenings_Cleanup", "[CleanupMinutes] = 15");
+                t.HasCheckConstraint("CK_Screenings_Price", "[BasePrice] >= 0");
+                t.HasCheckConstraint("CK_Screenings_Status", "[Status] IN ('Scheduled','Ongoing','Finished','Cancelled')");
+                t.HasCheckConstraint("CK_Screenings_TimeRange", "[EndAt] > [StartAt]");
             });
 
             entity.HasOne(e => e.Movie)
-                .WithMany(m => m.Showtimes)
+                .WithMany(m => m.Screenings)
                 .HasForeignKey(e => e.MovieId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.Auditorium)
-                .WithMany(a => a.Showtimes)
+                .WithMany(a => a.Screenings)
                 .HasForeignKey(e => e.AuditoriumId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(e => new { e.MovieId, e.StartAt }).HasDatabaseName("IX_Showtimes_MovieStart");
+            entity.HasIndex(e => new { e.MovieId, e.StartAt }).HasDatabaseName("IX_Screenings_MovieStart");
             entity.HasIndex(e => new { e.AuditoriumId, e.StartAt })
                 .IncludeProperties(e => new { e.EndAt, e.Status })
-                .HasDatabaseName("IX_Showtimes_RoomStart");
+                .HasDatabaseName("IX_Screenings_RoomStart");
         });
 
         // 14. Bookings
@@ -302,7 +304,7 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
             entity.Property(e => e.Status).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Pending");
             entity.Property(e => e.RowVersion).IsRowVersion();
 
-            entity.HasAlternateKey(e => new { e.BookingId, e.ShowtimeId })
+            entity.HasAlternateKey(e => new { e.BookingId, e.ScreeningId })
                 .HasName("UQ_Bookings_Show");
 
             entity.ToTable(t =>
@@ -325,62 +327,62 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
                 .HasForeignKey(e => e.StaffId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.Showtime)
+            entity.HasOne(e => e.Screening)
                 .WithMany(s => s.Bookings)
-                .HasForeignKey(e => e.ShowtimeId)
+                .HasForeignKey(e => e.ScreeningId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => new { e.CustomerId, e.BookingDate }).HasDatabaseName("IX_Bookings_CustomerDate");
             entity.HasIndex(e => e.StaffId).HasDatabaseName("IX_Bookings_Staff");
-            entity.HasIndex(e => e.ShowtimeId).HasDatabaseName("IX_Bookings_Show");
+            entity.HasIndex(e => e.ScreeningId).HasDatabaseName("IX_Bookings_Show");
         });
 
-        // 15. ShowtimeSeats
-        modelBuilder.Entity<ShowtimeSeat>(entity =>
+        // 15. ScreeningSeats
+        modelBuilder.Entity<ScreeningSeat>(entity =>
         {
-            entity.HasKey(e => e.ShowtimeSeatId);
+            entity.HasKey(e => e.ScreeningSeatId);
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.Status).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Available");
             entity.Property(e => e.HoldExpiresAt).HasPrecision(0);
             entity.Property(e => e.RowVersion).IsRowVersion();
 
-            entity.HasIndex(e => new { e.ShowtimeId, e.SeatId })
+            entity.HasIndex(e => new { e.ScreeningId, e.SeatId })
                 .IsUnique()
-                .HasDatabaseName("UQ_ShowtimeSeats_Seat");
+                .HasDatabaseName("UQ_ScreeningSeats_Seat");
 
-            entity.HasAlternateKey(e => new { e.ShowtimeSeatId, e.ShowtimeId })
-                .HasName("UQ_ShowtimeSeats_Show");
+            entity.HasAlternateKey(e => new { e.ScreeningSeatId, e.ScreeningId })
+                .HasName("UQ_ScreeningSeats_Show");
 
             entity.ToTable(t =>
             {
-                t.HasCheckConstraint("CK_ShowtimeSeats_Price", "[Price] >= 0");
-                t.HasCheckConstraint("CK_ShowtimeSeats_Status", "[Status] IN ('Available','Held','Sold','Blocked')");
-                t.HasCheckConstraint("CK_ShowtimeSeats_HeldState",
+                t.HasCheckConstraint("CK_ScreeningSeats_Price", "[Price] >= 0");
+                t.HasCheckConstraint("CK_ScreeningSeats_Status", "[Status] IN ('Available','Held','Sold','Blocked')");
+                t.HasCheckConstraint("CK_ScreeningSeats_HeldState",
                     "([Status] = 'Held' AND [HeldByBookingId] IS NOT NULL AND [HoldExpiresAt] IS NOT NULL) OR ([Status] <> 'Held' AND [HeldByBookingId] IS NULL AND [HoldExpiresAt] IS NULL)");
             });
 
-            entity.HasOne(e => e.Showtime)
-                .WithMany(s => s.ShowtimeSeats)
-                .HasPrincipalKey(s => new { s.ShowtimeId, s.AuditoriumId })
-                .HasForeignKey(e => new { e.ShowtimeId, e.AuditoriumId })
+            entity.HasOne(e => e.Screening)
+                .WithMany(s => s.ScreeningSeats)
+                .HasPrincipalKey(s => new { s.ScreeningId, s.AuditoriumId })
+                .HasForeignKey(e => new { e.ScreeningId, e.AuditoriumId })
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.Seat)
-                .WithMany(s => s.ShowtimeSeats)
+                .WithMany(s => s.ScreeningSeats)
                 .HasPrincipalKey(s => new { s.SeatId, s.AuditoriumId })
                 .HasForeignKey(e => new { e.SeatId, e.AuditoriumId })
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.HeldByBooking)
-                .WithMany(b => b.HeldShowtimeSeats)
-                .HasPrincipalKey(b => new { b.BookingId, b.ShowtimeId })
-                .HasForeignKey(e => new { e.HeldByBookingId, e.ShowtimeId })
+                .WithMany(b => b.HeldScreeningSeats)
+                .HasPrincipalKey(b => new { b.BookingId, b.ScreeningId })
+                .HasForeignKey(e => new { e.HeldByBookingId, e.ScreeningId })
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(e => new { e.Status, e.HoldExpiresAt }).HasDatabaseName("IX_ShowtimeSeats_Expiry");
-            entity.HasIndex(e => e.HeldByBookingId).HasDatabaseName("IX_ShowtimeSeats_Booking");
-            entity.HasIndex(e => e.SeatId).HasDatabaseName("IX_ShowtimeSeats_PhysicalSeat");
+            entity.HasIndex(e => new { e.Status, e.HoldExpiresAt }).HasDatabaseName("IX_ScreeningSeats_Expiry");
+            entity.HasIndex(e => e.HeldByBookingId).HasDatabaseName("IX_ScreeningSeats_Booking");
+            entity.HasIndex(e => e.SeatId).HasDatabaseName("IX_ScreeningSeats_PhysicalSeat");
         });
 
         // 16. Tickets
@@ -402,21 +404,21 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
                     "([Status] = 'CheckedIn' AND [CheckedInAt] IS NOT NULL) OR ([Status] <> 'CheckedIn' AND [CheckedInAt] IS NULL)");
             });
 
-            entity.HasIndex(e => e.ShowtimeSeatId)
+            entity.HasIndex(e => e.ScreeningSeatId)
                 .IsUnique()
                 .HasFilter("[Status] <> 'Cancelled'")
                 .HasDatabaseName("UX_Tickets_ActiveSeat");
 
             entity.HasOne(e => e.Booking)
                 .WithMany(b => b.Tickets)
-                .HasPrincipalKey(b => new { b.BookingId, b.ShowtimeId })
-                .HasForeignKey(e => new { e.BookingId, e.ShowtimeId })
+                .HasPrincipalKey(b => new { b.BookingId, b.ScreeningId })
+                .HasForeignKey(e => new { e.BookingId, e.ScreeningId })
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.ShowtimeSeat)
+            entity.HasOne(e => e.ScreeningSeat)
                 .WithMany(ss => ss.Tickets)
-                .HasPrincipalKey(ss => new { ss.ShowtimeSeatId, ss.ShowtimeId })
-                .HasForeignKey(e => new { e.ShowtimeSeatId, e.ShowtimeId })
+                .HasPrincipalKey(ss => new { ss.ScreeningSeatId, ss.ScreeningId })
+                .HasForeignKey(e => new { e.ScreeningSeatId, e.ScreeningId })
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.BookingId).HasDatabaseName("IX_Tickets_Booking");
@@ -525,6 +527,65 @@ public class CinemaDbContext(DbContextOptions<CinemaDbContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.BookingId).HasDatabaseName("IX_Payments_Booking");
+        });
+
+        // 20. ConcessionSales
+        modelBuilder.Entity<ConcessionSale>(entity =>
+        {
+            entity.HasKey(e => e.ConcessionSaleId);
+            entity.Property(e => e.SaleCode).HasMaxLength(40).IsUnicode(false).IsRequired();
+            entity.HasIndex(e => e.SaleCode).IsUnique();
+            entity.Property(e => e.SaleDate).HasPrecision(0).HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.TotalAmount).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.PaymentMethod).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Cash");
+            entity.Property(e => e.Status).HasMaxLength(20).IsUnicode(false).HasDefaultValue("Completed");
+            entity.Property(e => e.RowVersion).IsRowVersion();
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ConcessionSales_Total", "[TotalAmount] >= 0");
+                t.HasCheckConstraint("CK_ConcessionSales_Status", "[Status] IN ('Completed','Cancelled')");
+            });
+
+            entity.HasOne(e => e.Staff)
+                .WithMany()
+                .HasForeignKey(e => e.StaffId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.StaffId).HasDatabaseName("IX_ConcessionSales_Staff");
+            entity.HasIndex(e => e.SaleDate).HasDatabaseName("IX_ConcessionSales_Date");
+        });
+
+        // 21. ConcessionSaleItems
+        modelBuilder.Entity<ConcessionSaleItem>(entity =>
+        {
+            entity.HasKey(e => e.ConcessionSaleItemId);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.Subtotal)
+                .HasPrecision(18, 2)
+                .HasComputedColumnSql("CONVERT(decimal(18,2), [Quantity] * [UnitPrice])", stored: true);
+
+            entity.HasIndex(e => new { e.ConcessionSaleId, e.ConcessionItemId })
+                .IsUnique()
+                .HasDatabaseName("UQ_ConcessionSaleItems_Item");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_ConcessionSaleItems_Quantity", "[Quantity] > 0");
+                t.HasCheckConstraint("CK_ConcessionSaleItems_UnitPrice", "[UnitPrice] >= 0");
+            });
+
+            entity.HasOne(e => e.ConcessionSale)
+                .WithMany(s => s.ConcessionSaleItems)
+                .HasForeignKey(e => e.ConcessionSaleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.ConcessionItem)
+                .WithMany()
+                .HasForeignKey(e => e.ConcessionItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ConcessionItemId).HasDatabaseName("IX_ConcessionSaleItems_Item");
         });
     }
 }

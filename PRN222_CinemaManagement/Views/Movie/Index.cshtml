@@ -1,0 +1,143 @@
+@model MovieListViewModel
+@{
+    ViewData["Title"] = "Phim";
+    var upcoming = Model.Tab == "upcoming";
+    var showing = Model.Tab == "showing";
+}
+
+<style>
+    .movies { max-width:1320px; margin:auto; padding:20px 12px 55px; }
+    .tabs,.filters,.cards { display:flex; gap:20px; }
+    .tabs { justify-content:center; margin-bottom:30px; border-bottom:1px solid #ccc; }
+    .tabs a { padding:10px; color:#111; text-decoration:none; font-weight:bold; }
+    .tabs .active { color:#07599e; border-bottom:4px solid #07599e; }
+    .filters { justify-content:space-between; flex-wrap:wrap; margin-bottom:25px; }
+    .filters a { color:#07599e; margin-right:10px; }
+    .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:28px; }
+    .poster { height:400px; position:relative; border-radius:18px; overflow:hidden; background:#26384a; }
+    .poster img { width:100%; height:100%; object-fit:cover; }
+    .age { position:absolute; top:12px; left:12px; padding:5px 10px; color:white; background:#e5b929; }
+    .title { color:#07599e; font-size:20px; font-weight:bold; margin:10px 0; }
+    .buy { width:100%; padding:11px; margin-top:10px; color:white; background:#07599e; border:0; border-radius:6px; font-weight:bold; }
+    .empty { grid-column:1/-1; text-align:center; padding:40px; }
+    @@media(max-width:800px) { .cards { grid-template-columns:repeat(2,1fr); gap:18px; } .poster { height:300px; } }
+    @@media(max-width:480px) { .poster { height:220px; } .title { font-size:16px; } }
+</style>
+
+<main class="movies">
+    @if (Model.CanManage)
+    {
+        <p><a class="btn btn-primary" asp-action="Create">Thêm phim</a></p>
+    }
+    <nav class="tabs" aria-label="Danh mục phim">
+        <a asp-route-tab="upcoming" asp-route-search="@Model.Search" asp-route-genreId="@Model.GenreId" class="@(upcoming ? "active" : "")">PHIM SẮP CHIẾU</a>
+        <a asp-route-tab="showing" asp-route-search="@Model.Search" asp-route-genreId="@Model.GenreId" class="@(showing ? "active" : "")">PHIM ĐANG CHIẾU</a>
+        @if (Model.CanReverseStatus)
+        {
+            <a asp-route-tab="ended" asp-route-search="@Model.Search" asp-route-genreId="@Model.GenreId" class="@(Model.Tab == "ended" ? "active" : "")">ĐÃ KẾT THÚC</a>
+        }
+    </nav>
+
+    <div class="filters">
+        <nav aria-label="Lọc thể loại">
+            <a asp-route-tab="@Model.Tab" asp-route-search="@Model.Search">Tất cả</a>
+            @foreach (var genre in Model.Genres)
+            {
+                <a asp-route-tab="@Model.Tab" asp-route-search="@Model.Search" asp-route-genreId="@genre.Id">@genre.Name</a>
+            }
+        </nav>
+        <form asp-action="Index" method="get">
+            <input type="hidden" name="tab" value="@Model.Tab" />
+            <input type="hidden" name="genreId" value="@Model.GenreId" />
+            <input name="search" value="@Model.Search" placeholder="Tìm phim..." aria-label="Tìm phim" />
+            <button type="submit">Tìm</button>
+        </form>
+    </div>
+
+    <section class="cards" aria-label="Danh sách phim">
+        @if (Model.Movies.Count == 0)
+        {
+            <p class="empty">Không tìm thấy phim phù hợp.</p>
+        }
+        @foreach (var movie in Model.Movies)
+        {
+            <article>
+                <div class="poster">
+                    @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
+                    {
+                        <img src="@movie.PosterUrl" alt="Poster phim @movie.Title" loading="lazy" />
+                    }
+                    <span class="age">@movie.AgeRating</span>
+                </div>
+                <div class="title">@movie.Title</div>
+                <div>Thể loại: @(movie.Genres.Count > 0 ? string.Join(", ", movie.Genres) : "Chưa cập nhật")</div>
+                <div>Thời lượng: @movie.DurationMinutes phút</div>
+                <div>Trạng thái: @(movie.Status == "Upcoming" ? "Sắp chiếu" : movie.Status == "Showing" ? "Đang chiếu" : "Đã kết thúc")</div>
+                @if (movie.Status == "Upcoming" && movie.ReleaseDate.HasValue)
+                {
+                    <div>Khởi chiếu: @movie.ReleaseDate.Value.ToString("dd/MM/yyyy")</div>
+                }
+                @if (movie.Status == "Showing")
+                {
+                    <a class="buy d-block text-center text-decoration-none" asp-controller="Movies" asp-action="Details" asp-route-id="@movie.Id">ĐẶT VÉ</a>
+                }
+                else
+                {
+                    <button class="buy" type="button" disabled>@(movie.Status == "Upcoming" ? "SẮP KHỞI CHIẾU" : "ĐÃ KẾT THÚC")</button>
+                }
+                @if (Model.CanManage)
+                {
+                    @if (movie.Status != "Ended")
+                    {
+                        <p><a asp-controller="Screening" asp-action="CreateBatch" asp-route-movieId="@movie.Id">Lập lịch chiếu</a></p>
+                    }
+                    <p><a asp-action="Edit" asp-route-id="@movie.Id">Sửa thông tin</a></p>
+                    @if (movie.Status == "Upcoming")
+                    {
+                        <form asp-action="ChangeStatus" method="post" onsubmit="return confirm('Chuyển phim sang Đang chiếu?')">
+                            <input type="hidden" name="id" value="@movie.Id" />
+                            <input type="hidden" name="newStatus" value="Showing" />
+                            <input type="hidden" name="tab" value="@Model.Tab" />
+                            <input type="hidden" name="search" value="@Model.Search" />
+                            <input type="hidden" name="genreId" value="@Model.GenreId" />
+                            <button class="btn btn-outline-primary btn-sm" type="submit">Chuyển sang đang chiếu</button>
+                        </form>
+                    }
+                    else if (movie.Status == "Showing")
+                    {
+                        <form asp-action="ChangeStatus" method="post" onsubmit="return confirm('Kết thúc phim?')">
+                            <input type="hidden" name="id" value="@movie.Id" />
+                            <input type="hidden" name="newStatus" value="Ended" />
+                            <input type="hidden" name="tab" value="@Model.Tab" />
+                            <input type="hidden" name="search" value="@Model.Search" />
+                            <input type="hidden" name="genreId" value="@Model.GenreId" />
+                            <button class="btn btn-outline-danger btn-sm" type="submit">Kết thúc phim</button>
+                        </form>
+                        @if (Model.CanReverseStatus)
+                        {
+                            <form asp-action="ChangeStatus" method="post" class="mt-1" onsubmit="return confirm('Chuyển phim ngược về Sắp chiếu?')">
+                                <input type="hidden" name="id" value="@movie.Id" />
+                                <input type="hidden" name="newStatus" value="Upcoming" />
+                                <input type="hidden" name="tab" value="@Model.Tab" />
+                                <input type="hidden" name="search" value="@Model.Search" />
+                                <input type="hidden" name="genreId" value="@Model.GenreId" />
+                                <button class="btn btn-outline-secondary btn-sm" type="submit">Sửa trạng thái</button>
+                            </form>
+                        }
+                    }
+                    else if (movie.Status == "Ended" && Model.CanReverseStatus)
+                    {
+                        <form asp-action="ChangeStatus" method="post" onsubmit="return confirm('Mở lại phim ở trạng thái Đang chiếu?')">
+                            <input type="hidden" name="id" value="@movie.Id" />
+                            <input type="hidden" name="newStatus" value="Showing" />
+                            <input type="hidden" name="tab" value="@Model.Tab" />
+                            <input type="hidden" name="search" value="@Model.Search" />
+                            <input type="hidden" name="genreId" value="@Model.GenreId" />
+                            <button class="btn btn-outline-secondary btn-sm" type="submit">Sửa trạng thái</button>
+                        </form>
+                    }
+                }
+            </article>
+        }
+    </section>
+</main>

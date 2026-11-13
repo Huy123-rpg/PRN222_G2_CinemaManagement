@@ -6,7 +6,7 @@ public class Booking
     public string BookingCode { get; set; } = string.Empty;
     public int? CustomerId { get; set; }
     public int? StaffId { get; set; }
-    public int ShowtimeId { get; set; }
+    public int ScreeningId { get; set; }
     public DateTime BookingDate { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }
     public decimal TotalAmount { get; set; } = 0m;
@@ -16,8 +16,8 @@ public class Booking
 
     public Customer? Customer { get; set; }
     public Staff? Staff { get; set; }
-    public Showtime Showtime { get; set; } = null!;
-    public ICollection<ShowtimeSeat> HeldShowtimeSeats { get; set; } = new List<ShowtimeSeat>();
+    public Screening Screening { get; set; } = null!;
+    public ICollection<ScreeningSeat> HeldScreeningSeats { get; set; } = new List<ScreeningSeat>();
     public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
     public ICollection<BookingConcession> BookingConcessions { get; set; } = new List<BookingConcession>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

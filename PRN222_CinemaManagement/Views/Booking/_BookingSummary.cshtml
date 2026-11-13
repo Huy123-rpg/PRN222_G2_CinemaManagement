@@ -1,0 +1,80 @@
+@model BookingDetailsViewModel
+<div class="card mb-4"><div class="card-body">
+    <h2 class="h5">@Model.MovieTitle</h2>
+    <p>@Model.Auditorium · @BookingDisplay.VietnamTime(Model.StartAt).ToString("HH:mm · dd/MM/yyyy") (giờ Việt Nam)</p>
+    <dl class="row mb-2">
+        <dt class="col-sm-4">Mã đặt vé</dt><dd class="col-sm-8"><code>@Model.BookingCode</code></dd>
+        <dt class="col-sm-4">Khách hàng</dt><dd class="col-sm-8">@Model.CustomerName</dd>
+        <dt class="col-sm-4">Email</dt><dd class="col-sm-8">@Model.Email</dd>
+        <dt class="col-sm-4">Trạng thái</dt><dd class="col-sm-8">@BookingDisplay.StatusText(Model.Status)</dd>
+    </dl>
+    @if (Model.Seats.Count > 0)
+    {
+        <div class="booking-table-wrap">
+            <table class="table align-middle mb-0" aria-label="Chi tiết giá ghế trong đơn">
+                <thead><tr><th scope="col">Ghế</th><th scope="col">Loại ghế</th><th scope="col" class="text-end">Giá vé</th></tr></thead>
+                <tbody>
+                    @foreach (var seat in Model.Seats)
+                    {
+                        <tr><td>@seat.Label</td><td>@seat.SeatType</td><td class="text-end">@seat.Price.ToString("N0") đ</td></tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="table-light">
+                        <th colspan="2">Tạm tính tiền vé</th>
+                        <th class="text-end">@Model.SeatSubtotal.ToString("N0") đ</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+    else
+    {
+        <p>Đơn này không còn ghế đang giữ.</p>
+    }
+
+    @if (Model.Concessions.Count > 0)
+    {
+        <div class="booking-table-wrap mt-3">
+            <table class="table align-middle mb-0" aria-label="Chi tiết bắp rang và đồ uống trong đơn">
+                <thead>
+                    <tr>
+                        <th scope="col">Bắp &amp; đồ uống</th>
+                        <th scope="col" class="text-end">Đơn giá</th>
+                        <th scope="col" class="text-center">SL</th>
+                        <th scope="col" class="text-end">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Concessions)
+                    {
+                        <tr>
+                            <td>@item.Name</td>
+                            <td class="text-end">@item.UnitPrice.ToString("N0") đ</td>
+                            <td class="text-center">@item.Quantity</td>
+                            <td class="text-end">@item.Subtotal.ToString("N0") đ</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="table-light">
+                        <th colspan="3">Tạm tính bắp nước</th>
+                        <th class="text-end">@Model.ConcessionSubtotal.ToString("N0") đ</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center small text-muted mt-3 pt-2 border-top">
+            <span>Bắp &amp; đồ uống</span>
+            <span>Chưa chọn (0 đ)</span>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center border-top pt-3 mt-3">
+        <span class="h6 mb-0">Tổng cộng thanh toán</span>
+        <strong class="h5 text-primary mb-0">@Model.TotalAmount.ToString("N0") đ</strong>
+    </div>
+</div></div>

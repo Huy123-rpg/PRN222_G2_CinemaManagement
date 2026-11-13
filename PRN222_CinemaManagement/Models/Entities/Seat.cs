@@ -11,5 +11,5 @@ public class Seat
 
     public Auditorium Auditorium { get; set; } = null!;
     public SeatType SeatType { get; set; } = null!;
-    public ICollection<ShowtimeSeat> ShowtimeSeats { get; set; } = new List<ShowtimeSeat>();
+    public ICollection<ScreeningSeat> ScreeningSeats { get; set; } = new List<ScreeningSeat>();
 }

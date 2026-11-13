@@ -1,8 +1,9 @@
 namespace PRN222_CinemaManagement.Models.Entities;
 
-public class Showtime
+/// <summary>A scheduled showing of one movie in one auditorium.</summary>
+public class Screening
 {
-    public int ShowtimeId { get; set; }
+    public int ScreeningId { get; set; }
     public int MovieId { get; set; }
     public int AuditoriumId { get; set; }
     public DateTime StartAt { get; set; }
@@ -14,6 +15,6 @@ public class Showtime
 
     public Movie Movie { get; set; } = null!;
     public Auditorium Auditorium { get; set; } = null!;
-    public ICollection<ShowtimeSeat> ShowtimeSeats { get; set; } = new List<ShowtimeSeat>();
+    public ICollection<ScreeningSeat> ScreeningSeats { get; set; } = new List<ScreeningSeat>();
     public ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 }

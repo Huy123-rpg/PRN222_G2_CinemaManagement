@@ -1,0 +1,162 @@
+@model PRN222_CinemaManagement.ViewModels.ConfigureSeatsViewModel
+
+@{
+    ViewData["Title"] = "Sơ đồ ghế - " + Model.Auditorium.Name;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="fw-bold mb-0">Sơ đồ ghế: @Model.Auditorium.Name</h4>
+        <small class="text-muted">Tick chọn các ghế và chọn loại ghế hoặc trạng thái mới để cập nhật</small>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; Danh sách phòng</a>
+</div>
+
+<form asp-action="ConfigureSeats" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="auditoriumId" value="@Model.Auditorium.AuditoriumId" />
+
+    <!-- Thanh công cụ cập nhật ghế -->
+    <div class="card bg-light border-0 shadow-sm mb-4">
+        <div class="card-body py-3">
+            <div class="row align-items-center g-2">
+                <div class="col-md-3">
+                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="toggleAll(true)">Tick tất cả</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAll(false)">Bỏ tick</button>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                        <label class="small fw-bold me-2 text-nowrap">Đổi loại ghế:</label>
+                        <select name="seatTypeId" class="form-select form-select-sm">
+                            <option value="">-- Giữ nguyên --</option>
+                            @foreach (var st in Model.SeatTypes)
+                            {
+                                <option value="@st.SeatTypeId">@st.TypeName (x@st.PriceMultiplier)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                        <label class="small fw-bold me-2 text-nowrap">Trạng thái:</label>
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">-- Giữ nguyên --</option>
+                            <option value="Active">Hoạt động (Active)</option>
+                            <option value="Broken">Bị hỏng (Broken)</option>
+                            <option value="Inactive">Ngừng dùng (Inactive)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="col-md-3 text-end">
+                    <button type="submit" class="btn btn-primary btn-sm px-3">
+                        Lưu các ghế đã tick
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sơ đồ ghế dạng lưới trực quan -->
+    <div class="card border-0 shadow-sm p-3 text-center">
+        <!-- Màn hình chiếu -->
+        <div class="p-2 mb-4 bg-secondary text-white rounded text-center mx-auto" style="max-width: 500px; font-weight: bold; letter-spacing: 2px;">
+            MÀN HÌNH CHIẾU (SCREEN)
+        </div>
+
+        <div class="overflow-auto pb-3">
+            @{
+                var groupedRows = Model.Auditorium.Seats
+                    .GroupBy(s => s.RowLabel)
+                    .OrderBy(g => g.Key);
+            }
+
+            @foreach (var row in groupedRows)
+            {
+                <div class="d-flex justify-content-center align-items-center mb-2">
+                    <!-- Nút bấm chọn cả hàng -->
+                    <button type="button" class="btn btn-sm btn-outline-dark me-2 py-0" style="width: 32px; height: 32px;" onclick="toggleRow('@row.Key')" title="Bấm để tick cả hàng @row.Key">
+                        @row.Key
+                    </button>
+
+                    <!-- Các ghế trong hàng -->
+                    @foreach (var seat in row.OrderBy(s => s.SeatNumber))
+                    {
+                        string bgStyle = "background-color: #ffffff; border: 1px solid #ced4da;";
+                        string badgeText = "Std";
+                        string badgeClass = "badge bg-secondary";
+
+                        if (seat.SeatType != null && seat.SeatType.TypeName == "VIP")
+                        {
+                            bgStyle = "background-color: #fff3cd; border: 1px solid #ffe69c;";
+                            badgeText = "VIP";
+                            badgeClass = "badge bg-warning text-dark";
+                        }
+                        else if (seat.SeatType != null && seat.SeatType.TypeName == "Couple")
+                        {
+                            bgStyle = "background-color: #f8d7da; border: 1px solid #f1aeb5;";
+                            badgeText = "Đôi";
+                            badgeClass = "badge bg-danger";
+                        }
+
+                        if (seat.Status == "Broken")
+                        {
+                            bgStyle = "background-color: #f8d7da; border: 1px solid #dc3545; opacity: 0.7;";
+                            badgeText = "Hỏng";
+                            badgeClass = "badge bg-danger";
+                        }
+                        else if (seat.Status == "Inactive")
+                        {
+                            bgStyle = "background-color: #e9ecef; border: 1px dashed #6c757d; opacity: 0.55;";
+                            badgeText = "Khóa";
+                            badgeClass = "badge bg-dark";
+                        }
+
+                        <label class="d-flex flex-column align-items-center justify-content-center rounded m-1 p-1"
+                               style="width: 48px; height: 50px; cursor: pointer; @bgStyle">
+                            <span class="small fw-bold" style="font-size: 0.75rem;">@seat.RowLabel@seat.SeatNumber</span>
+                            <input type="checkbox" name="selectedSeatIds" value="@seat.SeatId" class="seat-checkbox row-@seat.RowLabel mt-1" />
+                            <span class="@badgeClass" style="font-size: 0.55rem;">@badgeText</span>
+                        </label>
+                    }
+
+                    <span class="text-muted ms-2 small" style="width: 20px;">@row.Key</span>
+                </div>
+            }
+        </div>
+
+        <!-- Chú thích loại ghế -->
+        <div class="d-flex justify-content-center flex-wrap gap-3 mt-3 pt-3 border-top small text-muted">
+            <div><span class="badge bg-secondary">Std</span> Ghế thường (Standard)</div>
+            <div><span class="badge bg-warning text-dark">VIP</span> Ghế VIP (x1.2)</div>
+            <div><span class="badge bg-danger">Đôi</span> Ghế đôi (Couple)</div>
+            <div><span class="badge bg-danger">Hỏng</span> Ghế hỏng (Broken)</div>
+            <div><span class="badge bg-dark">Khóa</span> Ngừng dùng (Inactive)</div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    // Hàm tick chọn hoặc bỏ chọn toàn bộ ghế
+    function toggleAll(checked) {
+        document.querySelectorAll('.seat-checkbox').forEach(function (cb) {
+            cb.checked = checked;
+        });
+    }
+
+    // Hàm tick/bỏ tick theo hàng
+    function toggleRow(rowLabel) {
+        var checkboxes = document.querySelectorAll('.row-' + rowLabel);
+        var allChecked = true;
+        checkboxes.forEach(function (cb) {
+            if (!cb.checked) allChecked = false;
+        });
+        checkboxes.forEach(function (cb) {
+            cb.checked = !allChecked;
+        });
+    }
+</script>
+}

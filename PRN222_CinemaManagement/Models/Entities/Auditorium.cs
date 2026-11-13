@@ -9,5 +9,5 @@ public class Auditorium
     public string Status { get; set; } = "Active";
 
     public ICollection<Seat> Seats { get; set; } = new List<Seat>();
-    public ICollection<Showtime> Showtimes { get; set; } = new List<Showtime>();
+    public ICollection<Screening> Screenings { get; set; } = new List<Screening>();
 }
