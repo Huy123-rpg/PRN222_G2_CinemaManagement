@@ -18,6 +18,7 @@ builder.Services.AddDbContext<CinemaDbContext>(options =>
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IScreeningRepository, ScreeningRepository>();

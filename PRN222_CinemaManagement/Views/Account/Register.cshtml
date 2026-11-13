@@ -1,0 +1,66 @@
+@model RegisterViewModel
+@{
+    ViewData["Title"] = "Đăng ký tài khoản";
+}
+
+<div class="row justify-content-center mt-4">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h3 class="card-title text-center mb-1">Đăng ký tài khoản</h3>
+                <p class="text-muted text-center small mb-4">Trở thành thành viên để đặt vé và nhận nhiều ưu đãi</p>
+
+                <form asp-action="Register" method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger small mb-3"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="Username" class="form-label">Tên đăng nhập</label>
+                        <input asp-for="Username" class="form-control" placeholder="Nhập tên đăng nhập" autofocus />
+                        <span asp-validation-for="Username" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="FullName" class="form-label">Họ và tên</label>
+                        <input asp-for="FullName" class="form-control" placeholder="Ví dụ: Nguyễn Văn A" />
+                        <span asp-validation-for="FullName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label">Email</label>
+                        <input asp-for="Email" type="email" class="form-control" placeholder="example@email.com" />
+                        <span asp-validation-for="Email" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="PhoneNumber" class="form-label">Số điện thoại</label>
+                        <input asp-for="PhoneNumber" class="form-control" placeholder="Ví dụ: 0912345678" />
+                        <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Password" class="form-label">Mật khẩu</label>
+                        <input asp-for="Password" class="form-control" placeholder="Tối thiểu 6 ký tự" />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-4">
+                        <label asp-for="ConfirmPassword" class="form-label">Xác nhận mật khẩu</label>
+                        <input asp-for="ConfirmPassword" class="form-control" placeholder="Nhập lại mật khẩu" />
+                        <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2">Đăng ký</button>
+                </form>
+
+                <div class="text-center mt-3 pt-3 border-top">
+                    <span class="text-muted small">Đã có tài khoản?</span>
+                    <a asp-action="Login" class="small fw-semibold text-decoration-none">Đăng nhập ngay</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
