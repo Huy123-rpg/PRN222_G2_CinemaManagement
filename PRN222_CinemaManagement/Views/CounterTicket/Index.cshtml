@@ -1,197 +1,234 @@
-@model IEnumerable<PRN222_CinemaManagement.Models.Entities.Screening>
+@model PRN222_CinemaManagement.ViewModels.CounterMovieCatalogViewModel
 @{
     ViewData["Title"] = "Bán vé tại quầy (UC-13)";
-    var movies = ViewBag.Movies as List<PRN222_CinemaManagement.Models.Entities.Movie> ?? new();
-    int? selectedMovieId = ViewBag.SelectedMovieId as int?;
-    string statusFilter = ViewBag.StatusFilter as string ?? "All";
-    int currentPage = ViewBag.CurrentPage ?? 1;
-    int totalPages = ViewBag.TotalPages ?? 1;
-    int totalItems = ViewBag.TotalItems ?? 0;
-    int pageSize = ViewBag.PageSize ?? 10;
+
+    string AgeBadgeClass(string rating) => rating switch
+    {
+        "P" or "K" => "bg-success",
+        "T13" => "bg-info text-dark",
+        "T16" => "bg-warning text-dark",
+        "T18" => "bg-danger",
+        _ => "bg-secondary"
+    };
 }
 
-<div class="container my-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="container-fluid px-0">
+    @* Thanh tiêu đề và nút chức năng *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <div>
-            <h2 class="text-primary mb-1"><i class="bi bi-ticket-perforated"></i> Bán vé tại quầy (Counter Ticket Sales)</h2>
-            <p class="text-muted mb-0">Bán vé trực tiếp cho khách hàng vãng lai tại quầy (hỗ trợ cả phim đang chiếu và vé sớm Presale).</p>
+            <h2 class="text-primary fw-bold mb-1">
+                <i class="bi bi-ticket-perforated"></i> Bán vé tại quầy (Counter Ticket Sales)
+            </h2>
+            <p class="text-muted mb-0">Chọn phim để xem danh sách các suất chiếu khả dụng và tiến hành bán vé cho khách tại quầy.</p>
         </div>
-        <a asp-action="Index" asp-route-statusFilter="@statusFilter" asp-route-movieId="@selectedMovieId" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-clockwise"></i> Tải lại danh sách
-        </a>
+        <div class="d-flex gap-2">
+            <a asp-action="History" class="btn btn-outline-primary">
+                <i class="bi bi-clock-history me-1"></i> Lịch sử bán vé quầy
+            </a>
+            <a asp-controller="Concession" asp-action="Index" class="btn btn-outline-secondary">
+                <i class="bi bi-cup-straw me-1"></i> Bán bắp nước riêng
+            </a>
+        </div>
     </div>
 
-    @* Thông báo thành công / lỗi *@
+    @* Thông báo *@
     @if (TempData["SuccessMessage"] != null)
     {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
             <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
     @if (TempData["ErrorMessage"] != null)
     {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
 
-    @* Thanh tab phân loại: Tất cả / Đang chiếu / Vé sớm Presale *@
-    <ul class="nav nav-pills mb-3">
-        <li class="nav-item">
-            <a class="nav-link @(statusFilter == "All" ? "active" : "")"
-               asp-action="Index" asp-route-statusFilter="All" asp-route-movieId="@selectedMovieId">
-                <i class="bi bi-collection-play me-1"></i> Tất cả suất chiếu
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(statusFilter == "Showing" ? "active" : "")"
-               asp-action="Index" asp-route-statusFilter="Showing" asp-route-movieId="@selectedMovieId">
-                <i class="bi bi-film me-1"></i> Phim đang chiếu (Now Showing)
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link @(statusFilter == "Upcoming" || statusFilter == "Presale" ? "active" : "")"
-               asp-action="Index" asp-route-statusFilter="Upcoming" asp-route-movieId="@selectedMovieId">
-                <i class="bi bi-stars me-1"></i> Sắp chiếu - Mở bán sớm (Presale)
-            </a>
-        </li>
-    </ul>
+    @* Bộ lọc trạng thái phim dạng Tabs *@
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <ul class="nav nav-pills">
+                    <li class="nav-item">
+                        <a class="nav-link @(Model.StatusFilter == "All" ? "active" : "")"
+                           asp-action="Index" asp-route-statusFilter="All" asp-route-search="@Model.Search">
+                            <i class="bi bi-collection-play me-1"></i> Tất cả phim mở bán
+                            <span class="badge @(Model.StatusFilter == "All" ? "bg-light text-dark" : "bg-secondary") ms-1">@(Model.TotalShowingCount + Model.TotalUpcomingCount)</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(Model.StatusFilter == "Showing" ? "active" : "")"
+                           asp-action="Index" asp-route-statusFilter="Showing" asp-route-search="@Model.Search">
+                            <i class="bi bi-film me-1"></i> Đang chiếu (Showing)
+                            <span class="badge @(Model.StatusFilter == "Showing" ? "bg-light text-dark" : "bg-secondary") ms-1">@Model.TotalShowingCount</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(Model.StatusFilter == "Upcoming" || Model.StatusFilter == "Presale" ? "active" : "")"
+                           asp-action="Index" asp-route-statusFilter="Upcoming" asp-route-search="@Model.Search">
+                            <i class="bi bi-stars me-1"></i> Sắp chiếu - Mở bán sớm (Presale)
+                            <span class="badge @(Model.StatusFilter == "Upcoming" || Model.StatusFilter == "Presale" ? "bg-light text-dark" : "bg-secondary") ms-1">@Model.TotalUpcomingCount</span>
+                        </a>
+                    </li>
+                </ul>
 
-    @* Bộ lọc theo Phim *@
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <form method="get" asp-action="Index" class="row g-3 align-items-center">
-                <input type="hidden" name="statusFilter" value="@statusFilter" />
-                <div class="col-md-5">
-                    <label class="form-label fw-bold mb-1">Lọc theo phim:</label>
-                    <select name="movieId" class="form-select" onchange="this.form.submit()">
-                        <option value="">-- Tất cả phim trong danh mục --</option>
-                        @foreach (var m in movies)
-                        {
-                            string typeBadge = m.Status == "Upcoming" ? "[Vé sớm]" : "[Đang chiếu]";
-                            if (selectedMovieId == m.MovieId)
+                @* Ô tìm kiếm tên phim *@
+                <form method="get" asp-action="Index" class="d-flex gap-2 ms-auto" style="min-width: 280px; max-width: 400px;">
+                    <input type="hidden" name="statusFilter" value="@Model.StatusFilter" />
+                    <input type="search" name="search" value="@Model.Search" class="form-control form-control-sm" placeholder="Tìm tên phim..." />
+                    <button type="submit" class="btn btn-primary btn-sm px-3 text-nowrap">
+                        <i class="bi bi-search"></i> Tìm
+                    </button>
+                    @if (Model.HasActiveFilters)
+                    {
+                        <a asp-action="Index" class="btn btn-outline-secondary btn-sm" title="Xóa tìm kiếm">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    }
+                </form>
+            </div>
+        </div>
+    </div>
+
+    @* Danh sách thẻ phim (Movie Cards Grid) *@
+    @if (Model.Movies.Count == 0)
+    {
+        <div class="card shadow-sm border-0 py-5 text-center">
+            <div class="card-body">
+                <i class="bi bi-camera-reels text-muted" style="font-size: 3rem;"></i>
+                <h5 class="fw-bold mt-3 mb-1">Không tìm thấy phim phù hợp</h5>
+                <p class="text-muted small mb-3">
+                    @(Model.HasActiveFilters ? "Thử thay đổi từ khóa tìm kiếm hoặc chọn lại tab phân loại." : "Hiện chưa có phim nào có suất chiếu Scheduled hợp lệ sắp tới.")
+                </p>
+                @if (Model.HasActiveFilters)
+                {
+                    <a asp-action="Index" class="btn btn-outline-primary btn-sm">Xem tất cả phim khả dụng</a>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4 mb-4">
+            @foreach (var movie in Model.Movies)
+            {
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card h-100 shadow-sm border-0 d-flex flex-column overflow-hidden transition-hover">
+                        @* Ảnh poster *@
+                        <div class="position-relative bg-dark text-center" style="height: 320px; overflow: hidden;">
+                            @if (!string.IsNullOrWhiteSpace(movie.PosterUrl))
                             {
-                                <option value="@m.MovieId" selected>@typeBadge @m.Title (@m.DurationMinutes phút - @m.AgeRating)</option>
+                                <img src="@movie.PosterUrl" alt="Poster @movie.Title" class="w-100 h-100 object-fit-cover" loading="lazy" />
                             }
                             else
                             {
-                                <option value="@m.MovieId">@typeBadge @m.Title (@m.DurationMinutes phút - @m.AgeRating)</option>
+                                <div class="d-flex align-items-center justify-content-center h-100 text-white-50 bg-secondary">
+                                    <div class="text-center">
+                                        <i class="bi bi-film fs-1"></i>
+                                        <div class="small mt-1">CINEMA</div>
+                                    </div>
+                                </div>
                             }
-                        }
-                    </select>
-                </div>
-                <div class="col-md-7 text-md-end pt-md-4">
-                    <span class="badge bg-info text-dark p-2">
-                        <i class="bi bi-info-circle"></i> Chỉ hiển thị các suất chiếu có trạng thái <strong>Scheduled</strong> sắp tới và phòng <strong>Active</strong>
-                    </span>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    @* Bảng danh sách suất chiếu *@
-    <div class="card shadow-sm">
-        <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-calendar3"></i> Danh sách suất chiếu khả dụng</span>
-            <small class="text-muted fw-normal">Tổng cộng: @totalItems suất chiếu</small>
-        </div>
-        <div class="card-body p-0">
-            @if (!Model.Any())
-            {
-                <div class="text-center py-5 text-muted">
-                    <i class="bi bi-camera-reels display-4"></i>
-                    <p class="mt-3 mb-1 fw-bold">Hiện chưa có suất chiếu nào khả dụng theo bộ lọc.</p>
-                    <small>Vui lòng kiểm tra lại trạng thái phim (Showing/Upcoming) và lịch chiếu (Scheduled) trong hệ thống.</small>
-                </div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Mã</th>
-                                <th>Tên phim</th>
-                                <th>Phòng chiếu</th>
-                                <th>Thời gian chiếu (Giờ VN)</th>
-                                <th>Giá cơ bản</th>
-                                <th class="text-center">Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var sc in Model)
-                            {
-                                var vnStart = sc.StartAt.ToLocalTime();
-                                var vnEnd = sc.EndAt.ToLocalTime();
-                                <tr>
-                                    <td><span class="badge bg-secondary">#@sc.ScreeningId</span></td>
-                                    <td>
-                                        <div class="fw-bold text-primary">
-                                            @sc.Movie.Title
-                                            @if (sc.Movie.Status == "Upcoming")
-                                            {
-                                                <span class="badge bg-warning text-dark ms-1"><i class="bi bi-stars"></i> Vé sớm (Presale)</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-success ms-1">Đang chiếu</span>
-                                            }
-                                        </div>
-                                        <small class="text-muted">@sc.Movie.DurationMinutes phút | Độ tuổi: @sc.Movie.AgeRating</small>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-dark">@sc.Auditorium.Name</span>
-                                    </td>
-                                    <td>
-                                        <div class="fw-semibold">@vnStart.ToString("HH:mm") - @vnEnd.ToString("HH:mm")</div>
-                                        <small class="text-muted">@vnStart.ToString("dd/MM/yyyy")</small>
-                                    </td>
-                                    <td class="fw-bold text-success">
-                                        @sc.BasePrice.ToString("N0") đ
-                                    </td>
-                                    <td class="text-center">
-                                        <a asp-action="SelectSeats" asp-route-screeningId="@sc.ScreeningId" 
-                                           class="btn btn-primary btn-sm px-3">
-                                            <i class="bi bi-grid-3x3-gap"></i> Chọn ghế & Bán vé
-                                        </a>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-
-                @if (totalPages > 1)
-                {
-                    <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 d-print-none">
-                        <div class="text-muted small">
-                            Hiển thị @((currentPage - 1) * pageSize + 1) - @(Math.Min(currentPage * pageSize, totalItems)) trên tổng số @totalItems suất chiếu
+                            @* Huy hiệu trạng thái trên poster *@
+                            <div class="position-absolute top-0 start-0 m-2 d-flex flex-column gap-1">
+                                <span class="badge @AgeBadgeClass(movie.AgeRating) shadow-sm">@movie.AgeRating</span>
+                                @if (movie.Status == "Upcoming")
+                                {
+                                    <span class="badge bg-warning text-dark shadow-sm"><i class="bi bi-stars"></i> Vé sớm</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success shadow-sm">Đang chiếu</span>
+                                }
+                            </div>
+                            <div class="position-absolute bottom-0 end-0 m-2">
+                                <span class="badge bg-dark bg-opacity-75 text-white">
+                                    <i class="bi bi-clock me-1"></i>@movie.DurationMinutes phút
+                                </span>
+                            </div>
                         </div>
-                        <ul class="pagination pagination-sm mb-0">
-                            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
-                                <a class="page-link" asp-action="Index" asp-route-statusFilter="@statusFilter" asp-route-movieId="@selectedMovieId" asp-route-page="@(currentPage - 1)">Trước</a>
-                            </li>
-                            @for (int p = 1; p <= totalPages; p++)
+
+                        @* Nội dung thẻ phim *@
+                        <div class="card-body d-flex flex-column p-3 flex-grow-1">
+                            <h5 class="fw-bold mb-1 text-truncate" title="@movie.Title">@movie.Title</h5>
+
+                            @if (movie.Genres.Count > 0)
                             {
-                                <li class="page-item @(p == currentPage ? "active" : "")">
-                                    <a class="page-link" asp-action="Index" asp-route-statusFilter="@statusFilter" asp-route-movieId="@selectedMovieId" asp-route-page="@p">@p</a>
-                                </li>
+                                <div class="d-flex flex-wrap gap-1 mb-2">
+                                    @foreach (var g in movie.Genres.Take(3))
+                                    {
+                                        <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.72rem;">@g</span>
+                                    }
+                                </div>
                             }
-                            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
-                                <a class="page-link" asp-action="Index" asp-route-statusFilter="@statusFilter" asp-route-movieId="@selectedMovieId" asp-route-page="@(currentPage + 1)">Sau</a>
-                            </li>
-                        </ul>
+
+                            <p class="text-muted small mb-3 flex-grow-1" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                @(string.IsNullOrWhiteSpace(movie.Description) ? "Không có mô tả nội dung phim." : movie.Description)
+                            </p>
+
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top mt-auto">
+                                <span class="badge bg-primary-subtle text-primary-emphasis border px-2 py-1">
+                                    <i class="bi bi-calendar-event me-1"></i> @movie.AvailableScreeningsCount suất sắp tới
+                                </span>
+                                <a asp-action="Screenings" asp-route-movieId="@movie.MovieId" class="btn btn-primary btn-sm px-3">
+                                    Chọn phim <i class="bi bi-chevron-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                }
-                else if (totalItems > 0)
-                {
-                    <div class="card-footer bg-white text-muted small py-2 d-print-none">
-                        Tổng số: @totalItems suất chiếu
-                    </div>
-                }
+                </div>
             }
         </div>
-    </div>
+
+        @* Phân trang *@
+        @if (Model.TotalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center py-3 border-top">
+                <div class="text-muted small">
+                    Hiển thị <strong>@(((Model.Page - 1) * Model.PageSize) + 1) - @Math.Min(Model.Page * Model.PageSize, Model.TotalItems)</strong> trên tổng số <strong>@Model.TotalItems</strong> phim
+                </div>
+                <nav aria-label="Phân trang danh sách phim">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index"
+                               asp-route-statusFilter="@Model.StatusFilter"
+                               asp-route-search="@Model.Search"
+                               asp-route-page="@(Model.Page - 1)">&laquo; Trước</a>
+                        </li>
+                        @for (int p = 1; p <= Model.TotalPages; p++)
+                        {
+                            <li class="page-item @(p == Model.Page ? "active" : "")">
+                                <a class="page-link" asp-action="Index"
+                                   asp-route-statusFilter="@Model.StatusFilter"
+                                   asp-route-search="@Model.Search"
+                                   asp-route-page="@p">@p</a>
+                            </li>
+                        }
+                        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index"
+                               asp-route-statusFilter="@Model.StatusFilter"
+                               asp-route-search="@Model.Search"
+                               asp-route-page="@(Model.Page + 1)">Sau &raquo;</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    }
 </div>
+
+<style>
+    .transition-hover {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .transition-hover:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+    }
+    .object-fit-cover {
+        object-fit: cover;
+    }
+</style>

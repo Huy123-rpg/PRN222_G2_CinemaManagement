@@ -25,7 +25,9 @@ public sealed record RevenueSummaryResult(
 public sealed record CancellationReportResult(
     List<Booking> Bookings,
     decimal TotalCancelledValue,
+    decimal TotalRefundObligation,
     decimal TotalRefund,
+    decimal TotalRefundPending,
     int TotalCancelledTickets,
     int TotalBookings);
 

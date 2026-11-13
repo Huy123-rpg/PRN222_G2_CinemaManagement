@@ -28,7 +28,16 @@ public class RevenueReportService(IRevenueReportRepository repository) : IRevenu
             var booking = group.First().Booking;
             decimal totalPaid = group.Sum(p => p.Amount);
             decimal totalRefundForBooking = group.Sum(p => p.RefundAmount);
-            decimal net = totalPaid - totalRefundForBooking;
+
+            // Quy tắc hoàn tiền: Khi đơn bị hủy hợp lệ (Status == "Cancelled" hoặc "Refunded"), nghĩa vụ hoàn tiền
+            // phát sinh ngay lập tức (100% số tiền đã thanh toán), điều chỉnh giảm doanh thu thuần tức thì mà
+            // không đợi nhân viên trả tiền. Khi nhân viên chi trả tiền mặt (totalRefundForBooking tăng lên),
+            // tổng nghĩa vụ hoàn tiền vẫn là totalPaid nên doanh thu thuần KHÔNG bị giảm lần thứ 2!
+            decimal effectiveRefund = (booking.Status == "Cancelled" || booking.Status == "Refunded")
+                ? Math.Max(totalRefundForBooking, totalPaid)
+                : totalRefundForBooking;
+
+            decimal net = totalPaid - effectiveRefund;
 
             totalRefund += totalRefundForBooking;
 
@@ -102,10 +111,12 @@ public class RevenueReportService(IRevenueReportRepository repository) : IRevenu
         var list = await repository.GetCancelledBookingsAsync(utcFrom, utcTo, statusFilter);
 
         decimal totalCancelledVal = list.Sum(b => b.TotalAmount);
-        decimal totalRefund = list.Sum(b => b.Payments.Sum(p => p.RefundAmount));
+        decimal totalRefundPaid = list.Sum(b => b.Payments.Sum(p => p.RefundAmount));
+        decimal totalRefundObligation = list.Sum(b => b.Payments.Where(p => p.PaymentStatus == "Success").Sum(p => p.Amount));
+        decimal totalRefundPending = Math.Max(0m, totalRefundObligation - totalRefundPaid);
         int totalCancelledTickets = list.Sum(b => b.Tickets.Count(t => t.Status == "Cancelled" || b.Status == "Cancelled" || b.Status == "Refunded"));
 
-        return new CancellationReportResult(list, totalCancelledVal, totalRefund, totalCancelledTickets, list.Count);
+        return new CancellationReportResult(list, totalCancelledVal, totalRefundObligation, totalRefundPaid, totalRefundPending, totalCancelledTickets, list.Count);
     }
 
     public async Task<ReconciliationResult> GetReconciliationAsync(DateTime utcStart, DateTime utcEnd)
@@ -302,7 +313,10 @@ public class RevenueReportService(IRevenueReportRepository repository) : IRevenu
         }
 
         grossRevenue += standaloneRevenue;
-        decimal netRevenue = grossRevenue - totalRefund;
+        decimal totalRefundObligation = bookings.Where(b => b.Status == "Cancelled" || b.Status == "Refunded")
+            .Sum(b => b.Payments.Where(p => p.PaymentStatus == "Success").Sum(p => p.Amount));
+        decimal effectiveTotalRefund = Math.Max(totalRefund, totalRefundObligation);
+        decimal netRevenue = grossRevenue - effectiveTotalRefund;
         decimal totalConcRevenue = standaloneRevenue + bookingConcRevenue;
 
         int totalChecked = items.Count;

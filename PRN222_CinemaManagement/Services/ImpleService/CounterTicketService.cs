@@ -243,4 +243,136 @@ public class CounterTicketService(
                 "Có lỗi xảy ra trong quá trình lưu dữ liệu bán vé. Vui lòng thử lại sau.");
         }
     }
+
+    public async Task<CounterMovieCatalogViewModel> GetCounterMovieCatalogAsync(
+        string? search, string? statusFilter, int page, int pageSize)
+    {
+        var (movies, totalCount, showingCount, upcomingCount) =
+            await counterTicketRepository.GetCounterCatalogMoviesPagedAsync(search, statusFilter, page, pageSize);
+
+        var cards = movies.Select(m => new CounterMovieCardViewModel
+        {
+            MovieId = m.MovieId,
+            Title = m.Title,
+            Description = m.Description,
+            DurationMinutes = m.DurationMinutes,
+            AgeRating = m.AgeRating,
+            PosterUrl = m.PosterUrl,
+            Status = m.Status,
+            AvailableScreeningsCount = m.Screenings.Count,
+            Genres = m.MovieGenres.Select(mg => mg.Genre.GenreName).ToList()
+        }).ToList();
+
+        return new CounterMovieCatalogViewModel
+        {
+            Movies = cards,
+            Search = search,
+            StatusFilter = statusFilter ?? "All",
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalCount,
+            TotalShowingCount = showingCount,
+            TotalUpcomingCount = upcomingCount
+        };
+    }
+
+    public async Task<CounterMovieScreeningsViewModel?> GetMovieScreeningsForCounterAsync(int movieId, string? showDateStr)
+    {
+        DateOnly? showDate = null;
+        if (!string.IsNullOrWhiteSpace(showDateStr) && DateOnly.TryParse(showDateStr, out var parsedDate))
+        {
+            showDate = parsedDate;
+        }
+
+        var movie = await counterTicketRepository.GetMovieWithScreeningsForCounterAsync(movieId, showDate);
+        if (movie == null) return null;
+
+        var allScreeningsForMovie = await counterTicketRepository.GetAvailableScreeningsAsync(movieId, null);
+        var availableDates = allScreeningsForMovie
+            .Select(s => DateOnly.FromDateTime(s.StartAt.AddHours(BookingConstants.VietnamUtcOffsetHours)))
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+
+        return new CounterMovieScreeningsViewModel
+        {
+            Movie = movie,
+            SelectedDate = showDateStr,
+            AvailableDates = availableDates,
+            Screenings = movie.Screenings.ToList()
+        };
+    }
+
+    public async Task<CounterSalesHistoryViewModel> GetCounterSalesHistoryAsync(
+        int staffUserId, string? searchCode, string? fromDateStr, string? toDateStr, int page, int pageSize)
+    {
+        var staff = await counterTicketRepository.GetStaffByUserIdAsync(staffUserId);
+        if (staff == null)
+        {
+            return new CounterSalesHistoryViewModel();
+        }
+
+        DateTime? utcFrom = null;
+        if (!string.IsNullOrWhiteSpace(fromDateStr) && DateTime.TryParse(fromDateStr, out var parsedFrom))
+        {
+            utcFrom = parsedFrom.Date.AddHours(-BookingConstants.VietnamUtcOffsetHours);
+        }
+
+        DateTime? utcTo = null;
+        if (!string.IsNullOrWhiteSpace(toDateStr) && DateTime.TryParse(toDateStr, out var parsedTo))
+        {
+            utcTo = parsedTo.Date.AddDays(1).AddHours(-BookingConstants.VietnamUtcOffsetHours);
+        }
+
+        var (bookings, totalCount, totalRevenue) =
+            await counterTicketRepository.GetCounterSalesHistoryPagedAsync(staff.StaffId, searchCode, utcFrom, utcTo, page, pageSize);
+
+        var historyItems = new List<CounterSaleHistoryItem>();
+
+        foreach (var b in bookings)
+        {
+            var linkedCs = await counterTicketRepository.GetConcessionSaleByBookingCodeAsync(b.BookingCode);
+            decimal ticketSum = b.Tickets.Sum(t => t.Price);
+            decimal concSum = linkedCs?.TotalAmount ?? 0m;
+            decimal totalPaid = b.Payments.Where(p => p.PaymentStatus == BookingConstants.PaymentOutcomes.Success).Sum(p => p.Amount);
+            if (totalPaid == 0) totalPaid = ticketSum + concSum;
+
+            var successPayment = b.Payments.FirstOrDefault(p => p.PaymentStatus == BookingConstants.PaymentOutcomes.Success);
+            string paymentMethod = successPayment?.PaymentMethod ?? (linkedCs?.PaymentMethod ?? "Cash");
+
+            historyItems.Add(new CounterSaleHistoryItem
+            {
+                BookingId = b.BookingId,
+                BookingCode = b.BookingCode,
+                BookingDate = b.BookingDate.AddHours(BookingConstants.VietnamUtcOffsetHours),
+                MovieTitle = b.Screening.Movie.Title,
+                PosterUrl = b.Screening.Movie.PosterUrl,
+                ScreeningStartAt = b.Screening.StartAt.AddHours(BookingConstants.VietnamUtcOffsetHours),
+                AuditoriumName = b.Screening.Auditorium.Name,
+                Seats = b.Tickets.Select(t => $"{t.ScreeningSeat.Seat.RowLabel}{t.ScreeningSeat.Seat.SeatNumber}").ToList(),
+                TicketCount = b.Tickets.Count,
+                TicketAmount = ticketSum,
+                ConcessionAmount = concSum,
+                TotalAmount = totalPaid,
+                PaymentMethod = paymentMethod,
+                Status = b.Status,
+                ConcessionSaleId = linkedCs?.ConcessionSaleId,
+                ConcessionSaleCode = linkedCs?.SaleCode
+            });
+        }
+
+        return new CounterSalesHistoryViewModel
+        {
+            Items = historyItems,
+            SearchCode = searchCode,
+            FromDate = fromDateStr,
+            ToDate = toDateStr,
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalCount,
+            TotalRevenue = totalRevenue,
+            StaffId = staff.StaffId,
+            StaffName = staff.User?.FullName ?? staff.StaffCode
+        };
+    }
 }

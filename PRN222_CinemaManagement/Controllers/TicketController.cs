@@ -302,4 +302,193 @@ public class TicketController(CinemaDbContext context) : Controller
         TempData["SuccessMessage"] = $"Soát vé thành công! Ghế: {ticket.ScreeningSeat.Seat.RowLabel}{ticket.ScreeningSeat.Seat.SeatNumber} - Phim: {ticket.Screening.Movie.Title}. Mời quý khách vào phòng chiếu.";
         return RedirectToAction(nameof(StaffLookup));
     }
+
+    // ==========================================
+    // 3. HOÀN TIỀN TẠI QUẦY (STAFF CASH REFUND)
+    // ==========================================
+
+    // GET: /Ticket/RefundQueue - Quản lý danh sách đơn chờ hoàn tiền & xác nhận hoàn tiền mặt tại quầy (UC-14/UC-30)
+    [HttpGet]
+    [SessionAuthorize(Roles = "Staff,CinemaManager,Admin")]
+    public async Task<IActionResult> RefundQueue(string? searchKeyword, string? statusFilter = "Pending")
+    {
+        var query = context.Bookings
+            .Include(b => b.Customer).ThenInclude(c => c!.User)
+            .Include(b => b.Screening).ThenInclude(s => s.Movie)
+            .Include(b => b.Screening).ThenInclude(s => s.Auditorium)
+            .Include(b => b.Tickets).ThenInclude(t => t.ScreeningSeat).ThenInclude(ss => ss.Seat)
+            .Include(b => b.Payments)
+            .Where(b => (b.Status == "Cancelled" || b.Status == "Refunded")
+                     && b.Payments.Any(p => p.PaymentStatus == "Success"))
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchKeyword))
+        {
+            string kw = searchKeyword.Trim().ToLower();
+            query = query.Where(b =>
+                b.BookingCode.ToLower().Contains(kw) ||
+                (b.Customer != null && b.Customer.User.FullName.ToLower().Contains(kw)) ||
+                (b.Customer != null && b.Customer.User.PhoneNumber != null && b.Customer.User.PhoneNumber.Contains(kw)) ||
+                b.Tickets.Any(t => t.TicketCode.ToLower().Contains(kw))
+            );
+        }
+
+        var allList = await query.OrderByDescending(b => b.BookingDate).ToListAsync();
+
+        var viewItems = allList.Select(b =>
+        {
+            decimal totalPaid = b.Payments.Where(p => p.PaymentStatus == "Success").Sum(p => p.Amount);
+            decimal refundPaid = b.Payments.Sum(p => p.RefundAmount);
+            decimal refundDue = b.Status == "Refunded" ? 0m : Math.Max(0m, totalPaid - refundPaid);
+
+            return new StaffRefundItemViewModel
+            {
+                BookingId = b.BookingId,
+                BookingCode = b.BookingCode,
+                BookingDate = b.BookingDate,
+                CustomerName = b.Customer?.User?.FullName ?? "Khách vãng lai",
+                CustomerPhone = b.Customer?.User?.PhoneNumber ?? "N/A",
+                MovieTitle = b.Screening?.Movie?.Title ?? "N/A",
+                AuditoriumName = b.Screening?.Auditorium?.Name ?? "",
+                ScreeningStartAt = b.Screening?.StartAt ?? DateTime.MinValue,
+                SeatLabels = b.Tickets.Select(t => $"{t.ScreeningSeat.Seat.RowLabel}{t.ScreeningSeat.Seat.SeatNumber}").ToList(),
+                TotalAmount = b.TotalAmount,
+                TotalPaid = totalPaid,
+                RefundPaid = refundPaid,
+                RefundDue = refundDue,
+                Status = b.Status,
+                BookingChannel = b.BookingChannel
+            };
+        }).ToList();
+
+        int pendingCount = viewItems.Count(i => i.RefundDue > 0);
+        int completedCount = viewItems.Count(i => i.Status == "Refunded" || (i.TotalPaid > 0 && i.RefundDue == 0));
+        decimal totalPendingAmt = viewItems.Where(i => i.RefundDue > 0).Sum(i => i.RefundDue);
+        decimal totalRefundedAmt = viewItems.Sum(i => i.RefundPaid);
+
+        List<StaffRefundItemViewModel> filteredItems;
+        if (statusFilter == "Completed")
+        {
+            filteredItems = viewItems.Where(i => i.Status == "Refunded" || (i.TotalPaid > 0 && i.RefundDue == 0)).ToList();
+        }
+        else if (statusFilter == "All")
+        {
+            filteredItems = viewItems;
+        }
+        else // default "Pending"
+        {
+            filteredItems = viewItems.Where(i => i.RefundDue > 0).ToList();
+        }
+
+        var model = new StaffRefundQueueViewModel
+        {
+            SearchKeyword = searchKeyword,
+            StatusFilter = statusFilter ?? "Pending",
+            PendingCount = pendingCount,
+            CompletedCount = completedCount,
+            TotalPendingAmount = totalPendingAmt,
+            TotalRefundedAmount = totalRefundedAmt,
+            Items = filteredItems
+        };
+
+        return View(model);
+    }
+
+    // POST: /Ticket/ConfirmRefund - Staff xác nhận đã hoàn tiền mặt cho khách tại quầy
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [SessionAuthorize(Roles = "Staff,CinemaManager,Admin")]
+    public async Task<IActionResult> ConfirmRefund(int bookingId, string? returnUrl = null)
+    {
+        IActionResult RedirectBack()
+        {
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+            return RedirectToAction(nameof(RefundQueue));
+        }
+
+        await using var tx = await context.Database.BeginTransactionAsync();
+        try
+        {
+            var booking = await context.Bookings
+                .Include(b => b.Payments)
+                .Include(b => b.Customer).ThenInclude(c => c!.User)
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+            if (booking == null)
+            {
+                TempData["ErrorMessage"] = "Không tìm thấy đơn đặt vé.";
+                return RedirectBack();
+            }
+
+            if (booking.Status == "Refunded")
+            {
+                TempData["ErrorMessage"] = $"Đơn vé '{booking.BookingCode}' đã được hoàn tiền trước đó rồi.";
+                return RedirectBack();
+            }
+
+            if (booking.Status != "Cancelled")
+            {
+                TempData["ErrorMessage"] = $"Chỉ đơn vé đã hủy (Cancelled) mới đủ điều kiện hoàn tiền (Trạng thái hiện tại: {booking.Status}).";
+                return RedirectBack();
+            }
+
+            var successPayments = booking.Payments
+                .Where(p => p.PaymentStatus == "Success")
+                .ToList();
+
+            if (!successPayments.Any())
+            {
+                TempData["ErrorMessage"] = $"Đơn vé '{booking.BookingCode}' chưa từng thanh toán thành công, không phát sinh tiền hoàn.";
+                return RedirectBack();
+            }
+
+            decimal totalPaid = successPayments.Sum(p => p.Amount);
+            decimal alreadyRefunded = successPayments.Sum(p => p.RefundAmount);
+            decimal refundDue = totalPaid - alreadyRefunded;
+
+            if (refundDue <= 0)
+            {
+                TempData["ErrorMessage"] = $"Đơn vé '{booking.BookingCode}' không còn khoản tiền nào cần hoàn.";
+                return RedirectBack();
+            }
+
+            // Cập nhật RefundAmount vào payments
+            decimal remaining = refundDue;
+            foreach (var p in successPayments)
+            {
+                decimal canRefund = p.Amount - p.RefundAmount;
+                if (canRefund > 0)
+                {
+                    decimal add = Math.Min(remaining, canRefund);
+                    p.RefundAmount += add;
+                    remaining -= add;
+                    if (remaining <= 0) break;
+                }
+            }
+
+            // Đổi trạng thái sang Refunded
+            booking.Status = "Refunded";
+
+            await context.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            TempData["SuccessMessage"] = $"Đã xác nhận hoàn tiền mặt {refundDue:N0}đ cho khách hàng (Đơn {booking.BookingCode}) thành công!";
+            return RedirectBack();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await tx.RollbackAsync();
+            TempData["ErrorMessage"] = "Đơn vé vừa được xử lý bởi một nhân viên khác. Vui lòng tải lại trang để kiểm tra.";
+            return RedirectBack();
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            TempData["ErrorMessage"] = "Có lỗi xảy ra trong quá trình xác nhận hoàn tiền: " + ex.Message;
+            return RedirectBack();
+        }
+    }
 }

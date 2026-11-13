@@ -32,5 +32,8 @@ public interface ICounterTicketService
         int[] seatIds,
         CancellationToken ct = default);
     Task<ServiceResult> ReleaseCounterSeatsAsync(int staffUserId, int bookingId, CancellationToken ct = default);
+    Task<CounterMovieCatalogViewModel> GetCounterMovieCatalogAsync(string? search, string? statusFilter, int page, int pageSize);
+    Task<CounterMovieScreeningsViewModel?> GetMovieScreeningsForCounterAsync(int movieId, string? showDateStr);
+    Task<CounterSalesHistoryViewModel> GetCounterSalesHistoryAsync(int staffUserId, string? searchCode, string? fromDateStr, string? toDateStr, int page, int pageSize);
     Task<ServiceResult<CounterSaleResult>> SellTicketsAsync(SellCounterTicketsRequest request);
 }

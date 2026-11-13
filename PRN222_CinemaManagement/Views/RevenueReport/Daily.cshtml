@@ -107,7 +107,8 @@
                         @foreach (var p in Model)
                         {
                             decimal rawConc = p.Booking.BookingConcessions.Sum(bc => (decimal?)bc.Subtotal) ?? 0m;
-                            decimal net = p.Amount - p.RefundAmount;
+                            decimal effRefund = (p.Booking.Status == "Cancelled" || p.Booking.Status == "Refunded") ? Math.Max(p.RefundAmount, p.Amount) : p.RefundAmount;
+                            decimal net = p.Amount - effRefund;
                             decimal effConc = 0m;
                             decimal effTicket = 0m;
 
@@ -116,7 +117,7 @@
                                 effConc = 0m;
                                 effTicket = 0m;
                             }
-                            else if (p.RefundAmount > 0)
+                            else if (effRefund > 0)
                             {
                                 decimal ratio = p.Amount > 0 ? (net / p.Amount) : 0m;
                                 effConc = Math.Round(rawConc * ratio, 2);
@@ -137,7 +138,20 @@
                                 <td class="text-center">@p.Booking.Tickets.Count(t => t.Status != "Cancelled")</td>
                                 <td class="text-end">@effTicket.ToString("N0") đ</td>
                                 <td class="text-end">@(effConc > 0 ? effConc.ToString("N0") + " đ" : "-")</td>
-                                <td class="text-end text-danger">@(p.RefundAmount > 0 ? "-" + p.RefundAmount.ToString("N0") + " đ" : "-")</td>
+                                <td class="text-end">
+                                    @if (p.Booking.Status == "Cancelled" && p.RefundAmount == 0)
+                                    {
+                                        <span class="badge bg-warning text-dark">Chờ hoàn @p.Amount.ToString("N0") đ</span>
+                                    }
+                                    else if (p.RefundAmount > 0)
+                                    {
+                                        <span class="text-danger">-@p.RefundAmount.ToString("N0") đ</span>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
                                 <td class="text-end fw-bold text-success">@net.ToString("N0") đ</td>
                             </tr>
                         }

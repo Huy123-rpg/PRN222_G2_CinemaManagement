@@ -28,6 +28,10 @@ public class ConcessionController(IConcessionService concessionService) : Contro
         var lowStockList = await concessionService.GetLowStockItemsAsync();
         ViewBag.LowStockCount = lowStockList.Count;
 
+        string formToken = Guid.NewGuid().ToString("N");
+        HttpContext.Session.SetString("ConcessionFormToken", formToken);
+        ViewBag.FormToken = formToken;
+
         ViewBag.CurrentPage = page;
         ViewBag.TotalPages = totalPages;
         ViewBag.TotalItems = totalCount;
@@ -61,12 +65,24 @@ public class ConcessionController(IConcessionService concessionService) : Contro
     // Thu ngân xác nhận bán các món bắp nước và trừ kho tự động (UC-15, UC-16)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Sell(int[]? itemIds, int[]? quantities, string? paymentMethod = "Cash")
+    public async Task<IActionResult> Sell(int[]? itemIds, int[]? quantities, string? paymentMethod = "Cash", string? formToken = null)
     {
         int? userId = HttpContext.Session.GetInt32("UserId");
         if (!userId.HasValue)
         {
             return RedirectToAction("Login", "Account");
+        }
+
+        // 1. Chống double-submit qua FormToken
+        if (!string.IsNullOrEmpty(formToken))
+        {
+            string? sessionToken = HttpContext.Session.GetString("ConcessionFormToken");
+            if (string.IsNullOrEmpty(sessionToken) || sessionToken != formToken)
+            {
+                TempData["ErrorMessage"] = "Yêu cầu đã được xử lý hoặc biểu mẫu đã hết hạn. Vui lòng không gửi trùng lặp.";
+                return RedirectToAction(nameof(Index));
+            }
+            HttpContext.Session.Remove("ConcessionFormToken");
         }
 
         // Kiểm tra tính hợp lệ của mảng dữ liệu gửi lên

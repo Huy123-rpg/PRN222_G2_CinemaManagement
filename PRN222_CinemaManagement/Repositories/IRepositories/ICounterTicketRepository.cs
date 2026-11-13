@@ -30,6 +30,12 @@ public interface ICounterTicketRepository
         int[] seatIds,
         CancellationToken ct = default);
     Task ReleaseCounterSeatsAsync(int staffId, int bookingId, CancellationToken ct = default);
+    Task<(List<Movie> Items, int TotalCount, int ShowingCount, int UpcomingCount)> GetCounterCatalogMoviesPagedAsync(
+        string? search, string? statusFilter, int page, int pageSize);
+    Task<Movie?> GetMovieWithScreeningsForCounterAsync(int movieId, DateOnly? showDate);
+    Task<(List<Booking> Items, int TotalCount, decimal TotalRevenue)> GetCounterSalesHistoryPagedAsync(
+        int staffId, string? searchCode, DateTime? utcFrom, DateTime? utcTo, int page, int pageSize);
+    Task<ConcessionSale?> GetConcessionSaleByBookingCodeAsync(string bookingCode);
     Task<CounterSaleResult> ExecuteCounterSaleTransactionAsync(
         int screeningId,
         List<int> seatIds,
