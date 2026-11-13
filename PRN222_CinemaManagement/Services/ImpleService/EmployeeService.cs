@@ -70,9 +70,9 @@ public class EmployeeService(
         }
 
         var role = await roleRepository.GetByIdAsync(model.RoleId);
-        if (role == null || role.RoleName == "Customer")
+        if (role == null || (role.RoleName != "Staff" && role.RoleName != "CinemaManager"))
         {
-            return ServiceResult.Fail("RoleId", "Vai trò được chọn không hợp lệ.");
+            return ServiceResult.Fail("RoleId", "Chỉ được phép tạo tài khoản với vai trò Quản lý hoặc Nhân viên.");
         }
 
         try
@@ -153,7 +153,7 @@ public class EmployeeService(
     public async Task<ServiceResult> UpdateEmployeeAsync(int id, EditEmployeeViewModel model, bool isModelStateValid)
     {
         var user = await userRepository.GetByIdWithDetailsAsync(id);
-        if (user == null)
+        if (user == null || user.Role.RoleName == "Admin" || user.Role.RoleName == "Customer")
         {
             return ServiceResult.NotFound();
         }
@@ -162,6 +162,17 @@ public class EmployeeService(
         if (await userRepository.ExistsByEmailAsync(model.Email, id))
         {
             errors.Add(new ValidationFailure("Email", "Email này đã được sử dụng bởi tài khoản khác."));
+        }
+
+        // Kiểm tra vai trò hợp lệ nếu có thay đổi
+        Role? targetNewRole = null;
+        if (user.RoleId != model.RoleId)
+        {
+            targetNewRole = await roleRepository.GetByIdAsync(model.RoleId);
+            if (targetNewRole == null || (targetNewRole.RoleName != "Staff" && targetNewRole.RoleName != "CinemaManager"))
+            {
+                errors.Add(new ValidationFailure("RoleId", "Vai trò mới không hợp lệ. Chỉ chấp nhận Quản lý hoặc Nhân viên."));
+            }
         }
 
         if (!isModelStateValid || errors.Count > 0)
@@ -178,15 +189,11 @@ public class EmployeeService(
                 user.PhoneNumber = model.PhoneNumber?.Trim();
                 user.Status = model.Status;
 
-                // Xử lý đổi vai trò (UC-34: Assign employee roles)
-                if (user.RoleId != model.RoleId && user.Role.RoleName != "Admin")
+                // Xử lý đổi vai trò (UC-34: Assign employee roles) an toàn, giữ lịch sử
+                if (targetNewRole != null)
                 {
-                    var newRole = await roleRepository.GetByIdAsync(model.RoleId);
-                    if (newRole != null && newRole.RoleName != "Customer" && newRole.RoleName != "Admin")
-                    {
-                        SwitchEmployeeRoleProfile(user, newRole.RoleName);
-                        user.RoleId = model.RoleId;
-                    }
+                    SwitchEmployeeRoleProfile(user, targetNewRole.RoleName);
+                    user.RoleId = targetNewRole.RoleId;
                 }
 
                 await userRepository.SaveChangesAsync();
@@ -216,31 +223,39 @@ public class EmployeeService(
 
     private void SwitchEmployeeRoleProfile(User user, string targetRoleName)
     {
-        if (user.Staff != null && targetRoleName == "CinemaManager")
+        // Giữ nguyên hồ sơ cũ để bảo toàn lịch sử bán vé (Booking.StaffId), chỉ tạo mới hồ sơ đích nếu chưa có
+        if (targetRoleName == "CinemaManager")
         {
-            var staffCode = user.Staff.StaffCode;
-            userRepository.RemoveStaff(user.Staff);
-            userRepository.AddCinemaManager(new CinemaManager
+            if (user.CinemaManager == null)
             {
-                UserId = user.UserId,
-                ManagerCode = "MGR" + staffCode.Replace("STF", "")
-            });
+                var codeNum = user.Staff?.StaffCode.Replace("STF", "") ?? $"{user.UserId:D4}";
+                userRepository.AddCinemaManager(new CinemaManager
+                {
+                    UserId = user.UserId,
+                    ManagerCode = "MGR" + codeNum
+                });
+            }
         }
-        else if (user.CinemaManager != null && targetRoleName == "Staff")
+        else if (targetRoleName == "Staff")
         {
-            var managerCode = user.CinemaManager.ManagerCode;
-            userRepository.RemoveCinemaManager(user.CinemaManager);
-            userRepository.AddStaff(new Staff
+            if (user.Staff == null)
             {
-                UserId = user.UserId,
-                StaffCode = "STF" + managerCode.Replace("MGR", "")
-            });
+                var codeNum = user.CinemaManager?.ManagerCode.Replace("MGR", "") ?? $"{user.UserId:D4}";
+                userRepository.AddStaff(new Staff
+                {
+                    UserId = user.UserId,
+                    StaffCode = "STF" + codeNum
+                });
+            }
         }
     }
 
     private static string GetEmployeeCode(User user) =>
-        user.Staff?.StaffCode ??
-        user.CinemaManager?.ManagerCode ??
-        user.Admin?.AdminCode ??
-        "-";
+        user.Role?.RoleName switch
+        {
+            "CinemaManager" => user.CinemaManager?.ManagerCode ?? user.Staff?.StaffCode ?? "-",
+            "Staff" => user.Staff?.StaffCode ?? user.CinemaManager?.ManagerCode ?? "-",
+            "Admin" => user.Admin?.AdminCode ?? "-",
+            _ => user.Customer?.CustomerCode ?? "-"
+        };
 }

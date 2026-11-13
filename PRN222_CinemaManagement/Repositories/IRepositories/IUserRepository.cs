@@ -18,6 +18,7 @@ public interface IUserRepository
     void RemoveCinemaManager(CinemaManager manager);
     void AddStaff(Staff staff);
     void RemoveStaff(Staff staff);
+    void AddCustomer(Customer customer);
     Task SaveChangesAsync();
     Task ExecuteInTransactionAsync(Func<Task> operation);
 }

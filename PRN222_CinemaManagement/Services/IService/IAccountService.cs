@@ -13,6 +13,8 @@ public record AuthenticatedUserInfo(int UserId, string Username, string FullName
 public interface IAccountService
 {
     Task<ServiceResult<AuthenticatedUserInfo>> AuthenticateAsync(LoginViewModel model);
+    Task<ServiceResult> ValidateRegistrationAsync(RegisterViewModel model);
+    Task<ServiceResult> RegisterAsync(RegisterViewModel model);
     Task<ProfileViewModel?> GetProfileAsync(int userId);
     Task<UpdateProfileViewModel?> GetUpdateProfileAsync(int userId);
     Task<ServiceResult<string>> UpdateProfileAsync(int userId, UpdateProfileViewModel model);

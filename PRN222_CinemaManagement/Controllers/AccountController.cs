@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using PRN222_CinemaManagement.Filters;
 using PRN222_CinemaManagement.Services.IService;
@@ -5,8 +6,13 @@ using PRN222_CinemaManagement.ViewModels;
 
 namespace PRN222_CinemaManagement.Controllers;
 
-public class AccountController(IAccountService accountService) : Controller
+public class AccountController(IAccountService accountService, IEmailService emailService) : Controller
 {
+    private const string SessionPendingRegistration = "PendingRegistration";
+    private const string SessionRegistrationOtp = "RegistrationOtp";
+    private const string SessionRegistrationOtpExpiry = "RegistrationOtpExpiry";
+    private const string SessionRegistrationEmail = "RegistrationEmail";
+
     // GET: /Account/Login
     [HttpGet]
     public IActionResult Login(string? returnUrl = null)
@@ -49,6 +55,163 @@ public class AccountController(IAccountService accountService) : Controller
         TempData["SuccessMessage"] = $"Đăng nhập thành công! Chào mừng {user.FullName}.";
 
         return RedirectToLocal(model.ReturnUrl, user.RoleName);
+    }
+
+    // GET: /Account/Register (Bước 1: Form đăng ký tài khoản)
+    [HttpGet]
+    public IActionResult Register()
+    {
+        if (!string.IsNullOrEmpty(HttpContext.Session.GetString("Username")))
+        {
+            return RedirectToAction("Index", "Home");
+        }
+
+        return View(new RegisterViewModel());
+    }
+
+    // POST: /Account/Register (Bước 1: Validate thông tin và gửi mã OTP qua Email)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Register(RegisterViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var validateResult = await accountService.ValidateRegistrationAsync(model);
+        if (!validateResult.Succeeded)
+        {
+            AddErrorsToModelState(validateResult);
+            return View(model);
+        }
+
+        // Sinh mã OTP 6 chữ số ngẫu nhiên
+        var otpCode = Random.Shared.Next(100000, 999999).ToString();
+
+        // Lưu thông tin đăng ký và OTP vào Session (hết hạn trong 5 phút)
+        HttpContext.Session.SetString(SessionPendingRegistration, JsonSerializer.Serialize(model));
+        HttpContext.Session.SetString(SessionRegistrationOtp, otpCode);
+        HttpContext.Session.SetString(SessionRegistrationOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+        HttpContext.Session.SetString(SessionRegistrationEmail, model.Email.Trim());
+
+        // Gửi email OTP
+        await emailService.SendOtpEmailAsync(model.Email.Trim(), model.FullName.Trim(), otpCode);
+
+        if (!emailService.IsSmtpConfigured())
+        {
+            TempData["DemoOtp"] = otpCode;
+        }
+
+        TempData["SuccessMessage"] = $"Mã xác thực đã được gửi tới email {model.Email}.";
+        return RedirectToAction(nameof(VerifyEmail));
+    }
+
+    // GET: /Account/VerifyEmail (Bước 2: Form nhập mã xác thực OTP)
+    [HttpGet]
+    public IActionResult VerifyEmail()
+    {
+        var pendingJson = HttpContext.Session.GetString(SessionPendingRegistration);
+        var email = HttpContext.Session.GetString(SessionRegistrationEmail);
+
+        if (string.IsNullOrEmpty(pendingJson) || string.IsNullOrEmpty(email))
+        {
+            TempData["ErrorMessage"] = "Không tìm thấy thông tin đăng ký. Vui lòng thực hiện đăng ký.";
+            return RedirectToAction(nameof(Register));
+        }
+
+        return View(new VerifyEmailViewModel { Email = email });
+    }
+
+    // POST: /Account/VerifyEmail (Bước 2: Xác nhận OTP và lưu tài khoản vào Database)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifyEmail(VerifyEmailViewModel model)
+    {
+        var pendingJson = HttpContext.Session.GetString(SessionPendingRegistration);
+        var expectedOtp = HttpContext.Session.GetString(SessionRegistrationOtp);
+        var expiryStr = HttpContext.Session.GetString(SessionRegistrationOtpExpiry);
+        var email = HttpContext.Session.GetString(SessionRegistrationEmail);
+        model.Email = email;
+
+        if (string.IsNullOrEmpty(pendingJson) || string.IsNullOrEmpty(expectedOtp) || string.IsNullOrEmpty(expiryStr))
+        {
+            TempData["ErrorMessage"] = "Phiên xác thực đã hết hạn. Vui lòng đăng ký lại.";
+            return RedirectToAction(nameof(Register));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        if (!DateTime.TryParse(expiryStr, out var expiry) || DateTime.UtcNow > expiry)
+        {
+            ModelState.AddModelError("OtpCode", "Mã xác thực đã hết hạn (quá 5 phút). Vui lòng nhấn 'Gửi lại mã'.");
+            return View(model);
+        }
+
+        if (!string.Equals(model.OtpCode.Trim(), expectedOtp.Trim(), StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("OtpCode", "Mã xác thực không chính xác. Vui lòng thử lại.");
+            return View(model);
+        }
+
+        var registerModel = JsonSerializer.Deserialize<RegisterViewModel>(pendingJson);
+        if (registerModel == null)
+        {
+            TempData["ErrorMessage"] = "Dữ liệu đăng ký không hợp lệ. Vui lòng đăng ký lại.";
+            return RedirectToAction(nameof(Register));
+        }
+
+        var result = await accountService.RegisterAsync(registerModel);
+        if (!result.Succeeded)
+        {
+            AddErrorsToModelState(result);
+            return View(model);
+        }
+
+        // Xóa sạch dữ liệu đăng ký tạm thời khỏi Session
+        HttpContext.Session.Remove(SessionPendingRegistration);
+        HttpContext.Session.Remove(SessionRegistrationOtp);
+        HttpContext.Session.Remove(SessionRegistrationOtpExpiry);
+        HttpContext.Session.Remove(SessionRegistrationEmail);
+
+        TempData["SuccessMessage"] = "Xác thực email và tạo tài khoản thành công! Bạn có thể đăng nhập ngay.";
+        return RedirectToAction("Login", "Account");
+    }
+
+    // POST: /Account/ResendOtp (Gửi lại mã OTP mới)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResendOtp()
+    {
+        var pendingJson = HttpContext.Session.GetString(SessionPendingRegistration);
+        if (string.IsNullOrEmpty(pendingJson))
+        {
+            TempData["ErrorMessage"] = "Không tìm thấy thông tin đăng ký. Vui lòng đăng ký lại.";
+            return RedirectToAction(nameof(Register));
+        }
+
+        var registerModel = JsonSerializer.Deserialize<RegisterViewModel>(pendingJson);
+        if (registerModel == null)
+        {
+            return RedirectToAction(nameof(Register));
+        }
+
+        var newOtp = Random.Shared.Next(100000, 999999).ToString();
+        HttpContext.Session.SetString(SessionRegistrationOtp, newOtp);
+        HttpContext.Session.SetString(SessionRegistrationOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+
+        await emailService.SendOtpEmailAsync(registerModel.Email.Trim(), registerModel.FullName.Trim(), newOtp);
+
+        if (!emailService.IsSmtpConfigured())
+        {
+            TempData["DemoOtp"] = newOtp;
+        }
+
+        TempData["SuccessMessage"] = $"Đã gửi mã xác thực mới tới email {registerModel.Email}.";
+        return RedirectToAction(nameof(VerifyEmail));
     }
 
     // POST: /Account/Logout (UC-02 - Đăng xuất xóa Session)

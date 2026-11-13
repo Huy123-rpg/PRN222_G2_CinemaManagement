@@ -107,6 +107,11 @@ public class UserRepository(CinemaDbContext context) : IUserRepository
         context.Staffs.Remove(staff);
     }
 
+    public void AddCustomer(Customer customer)
+    {
+        context.Customers.Add(customer);
+    }
+
     public Task SaveChangesAsync()
     {
         return context.SaveChangesAsync();
