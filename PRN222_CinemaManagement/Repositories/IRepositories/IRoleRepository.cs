@@ -8,6 +8,7 @@ namespace PRN222_CinemaManagement.Repositories.IRepositories;
 public interface IRoleRepository
 {
     Task<Role?> GetByIdAsync(int roleId);
+    Task<Role?> GetByNameAsync(string roleName);
     Task<List<string>> GetEmployeeFilterRoleNamesAsync();
     Task<List<Role>> GetAssignableEmployeeRolesAsync();
 }

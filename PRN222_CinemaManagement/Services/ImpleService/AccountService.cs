@@ -1,3 +1,4 @@
+using PRN222_CinemaManagement.Models.Entities;
 using PRN222_CinemaManagement.Repositories.IRepositories;
 using PRN222_CinemaManagement.Services.IService;
 using PRN222_CinemaManagement.ViewModels;
@@ -7,7 +8,10 @@ namespace PRN222_CinemaManagement.Services.ImpleService;
 /// <summary>
 /// Implementation of <see cref="IAccountService"/>.
 /// </summary>
-public class AccountService(IUserRepository userRepository, IPasswordService passwordService) : IAccountService
+public class AccountService(
+    IUserRepository userRepository,
+    IRoleRepository roleRepository,
+    IPasswordService passwordService) : IAccountService
 {
     public async Task<ServiceResult<AuthenticatedUserInfo>> AuthenticateAsync(LoginViewModel model)
     {
@@ -29,6 +33,78 @@ public class AccountService(IUserRepository userRepository, IPasswordService pas
 
         return ServiceResult<AuthenticatedUserInfo>.Success(
             new AuthenticatedUserInfo(user.UserId, user.Username, user.FullName, user.Role.RoleName));
+    }
+
+    public async Task<ServiceResult> ValidateRegistrationAsync(RegisterViewModel model)
+    {
+        var errors = new List<ValidationFailure>();
+
+        if (await userRepository.ExistsByUsernameAsync(model.Username.Trim()))
+        {
+            errors.Add(new ValidationFailure("Username", "Tên đăng nhập này đã tồn tại."));
+        }
+
+        if (await userRepository.ExistsByEmailAsync(model.Email.Trim()))
+        {
+            errors.Add(new ValidationFailure("Email", "Email này đã được sử dụng."));
+        }
+
+        if (errors.Count > 0)
+        {
+            return ServiceResult.Fail(errors);
+        }
+
+        return ServiceResult.Success();
+    }
+
+    public async Task<ServiceResult> RegisterAsync(RegisterViewModel model)
+    {
+        var validation = await ValidateRegistrationAsync(model);
+        if (!validation.Succeeded)
+        {
+            return validation;
+        }
+
+        var customerRole = await roleRepository.GetByNameAsync("Customer");
+        if (customerRole == null)
+        {
+            return ServiceResult.Fail(string.Empty, "Không tìm thấy cấu hình vai trò Khách hàng.");
+        }
+
+        try
+        {
+            await userRepository.ExecuteInTransactionAsync(async () =>
+            {
+                var user = new User
+                {
+                    Username = model.Username.Trim(),
+                    FullName = model.FullName.Trim(),
+                    Email = model.Email.Trim(),
+                    PhoneNumber = model.PhoneNumber?.Trim(),
+                    RoleId = customerRole.RoleId,
+                    Status = "Active",
+                    PasswordHash = passwordService.HashPassword(model.Password),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await userRepository.AddUserAsync(user);
+
+                var customer = new Customer
+                {
+                    UserId = user.UserId,
+                    CustomerCode = $"CUS{user.UserId:D4}"
+                };
+
+                userRepository.AddCustomer(customer);
+                await userRepository.SaveChangesAsync();
+            });
+
+            return ServiceResult.Success("Đăng ký tài khoản thành công! Vui lòng đăng nhập.");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult.Fail(string.Empty, "Có lỗi xảy ra khi đăng ký tài khoản: " + ex.Message);
+        }
     }
 
     public async Task<ProfileViewModel?> GetProfileAsync(int userId)

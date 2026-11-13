@@ -164,3 +164,52 @@ public class EditEmployeeViewModel
     [Display(Name = "Trạng thái")]
     public string Status { get; set; } = "Active"; // Active, Inactive, Locked
 }
+
+public class RegisterViewModel
+{
+    [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập")]
+    [StringLength(50, MinimumLength = 3, ErrorMessage = "Tên đăng nhập từ 3 đến 50 ký tự")]
+    [Display(Name = "Tên đăng nhập")]
+    public string Username { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Vui lòng nhập họ và tên")]
+    [StringLength(150, ErrorMessage = "Họ và tên tối đa 150 ký tự")]
+    [Display(Name = "Họ và tên")]
+    public string FullName { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Vui lòng nhập email")]
+    [EmailAddress(ErrorMessage = "Định dạng email không hợp lệ")]
+    [StringLength(254)]
+    [Display(Name = "Email")]
+    public string Email { get; set; } = string.Empty;
+
+    [Phone(ErrorMessage = "Số điện thoại không hợp lệ")]
+    [StringLength(20)]
+    [Display(Name = "Số điện thoại")]
+    public string? PhoneNumber { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng nhập mật khẩu")]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự")]
+    [DataType(DataType.Password)]
+    [Display(Name = "Mật khẩu")]
+    public string Password { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Vui lòng xác nhận mật khẩu")]
+    [DataType(DataType.Password)]
+    [Compare("Password", ErrorMessage = "Mật khẩu xác nhận không khớp")]
+    [Display(Name = "Xác nhận mật khẩu")]
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
+public class VerifyEmailViewModel
+{
+    [Required(ErrorMessage = "Vui lòng nhập mã xác thực")]
+    [StringLength(6, MinimumLength = 6, ErrorMessage = "Mã xác thực gồm 6 chữ số")]
+    [RegularExpression(@"^[0-9]{6}$", ErrorMessage = "Mã xác thực chỉ chứa 6 chữ số")]
+    [Display(Name = "Mã xác thực (OTP)")]
+    public string OtpCode { get; set; } = string.Empty;
+
+    public string? Email { get; set; }
+}
+
+

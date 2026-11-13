@@ -15,6 +15,11 @@ public class RoleRepository(CinemaDbContext context) : IRoleRepository
         return await context.Roles.FindAsync(roleId);
     }
 
+    public Task<Role?> GetByNameAsync(string roleName)
+    {
+        return context.Roles.FirstOrDefaultAsync(r => r.RoleName == roleName);
+    }
+
     public Task<List<string>> GetEmployeeFilterRoleNamesAsync()
     {
         return context.Roles
