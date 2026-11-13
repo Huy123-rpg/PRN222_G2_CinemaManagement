@@ -15,7 +15,8 @@ public class AccountService(
 {
     public async Task<ServiceResult<AuthenticatedUserInfo>> AuthenticateAsync(LoginViewModel model)
     {
-        var user = await userRepository.GetByUsernameWithRoleAsync(model.Username);
+        var username = model.Username?.Trim() ?? string.Empty;
+        var user = await userRepository.GetByUsernameWithRoleAsync(username);
 
         if (user == null || !passwordService.VerifyPassword(model.Password, user.PasswordHash))
         {
@@ -224,6 +225,12 @@ public class AccountService(
         if (user == null)
         {
             return ServiceResult.NotFound();
+        }
+
+        // Kiểm tra mật khẩu mới không được trùng với mật khẩu hiện tại
+        if (passwordService.VerifyPassword(newPassword, user.PasswordHash))
+        {
+            return ServiceResult.Fail("NewPassword", "Mật khẩu mới không được trùng với mật khẩu gần nhất của bạn.");
         }
 
         user.PasswordHash = passwordService.HashPassword(newPassword);

@@ -169,6 +169,7 @@ public class RegisterViewModel
 {
     [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập")]
     [StringLength(50, MinimumLength = 3, ErrorMessage = "Tên đăng nhập từ 3 đến 50 ký tự")]
+    [RegularExpression(@"^[a-zA-Z0-9_]{3,50}$", ErrorMessage = "Tên đăng nhập chỉ gồm chữ cái, chữ số và dấu gạch dưới, không chứa khoảng trắng")]
     [Display(Name = "Tên đăng nhập")]
     public string Username { get; set; } = string.Empty;
 
@@ -184,6 +185,7 @@ public class RegisterViewModel
     public string Email { get; set; } = string.Empty;
 
     [Phone(ErrorMessage = "Số điện thoại không hợp lệ")]
+    [RegularExpression(@"^(0[3|5|7|8|9])[0-9]{8}$", ErrorMessage = "Số điện thoại phải gồm 10 chữ số hợp lệ tại Việt Nam (đầu 03, 05, 07, 08, 09)")]
     [StringLength(20)]
     [Display(Name = "Số điện thoại")]
     public string? PhoneNumber { get; set; }
@@ -220,7 +222,7 @@ public class ForgotPasswordViewModel
     public string Email { get; set; } = string.Empty;
 }
 
-public class ResetPasswordViewModel
+public class VerifyResetOtpViewModel
 {
     public string? Email { get; set; }
 
@@ -229,6 +231,11 @@ public class ResetPasswordViewModel
     [RegularExpression(@"^[0-9]{6}$", ErrorMessage = "Mã xác thực chỉ chứa 6 chữ số")]
     [Display(Name = "Mã xác thực (OTP)")]
     public string OtpCode { get; set; } = string.Empty;
+}
+
+public class ResetPasswordViewModel
+{
+    public string? Email { get; set; }
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu mới")]
     [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu mới tối thiểu 6 ký tự")]
