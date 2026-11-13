@@ -12,12 +12,17 @@ public class AccountController(IAccountService accountService, IEmailService ema
     private const string SessionRegistrationOtp = "RegistrationOtp";
     private const string SessionRegistrationOtpExpiry = "RegistrationOtpExpiry";
     private const string SessionRegistrationEmail = "RegistrationEmail";
+    private const string SessionRegistrationOtpFailedAttempts = "RegistrationOtpFailedAttempts";
 
     private const string SessionResetUserId = "ResetPasswordUserId";
     private const string SessionResetEmail = "ResetPasswordEmail";
     private const string SessionResetFullName = "ResetPasswordFullName";
     private const string SessionResetOtp = "ResetPasswordOtp";
     private const string SessionResetOtpExpiry = "ResetPasswordOtpExpiry";
+    private const string SessionResetOtpFailedAttempts = "ResetPasswordOtpFailedAttempts";
+    private const string SessionResetOtpVerified = "ResetPasswordOtpVerified";
+
+    private const int MaxOtpAttempts = 5;
 
     // GET: /Account/Login
     [HttpGet]
@@ -100,6 +105,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
         HttpContext.Session.SetString(SessionRegistrationOtp, otpCode);
         HttpContext.Session.SetString(SessionRegistrationOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
         HttpContext.Session.SetString(SessionRegistrationEmail, model.Email.Trim());
+        HttpContext.Session.SetInt32(SessionRegistrationOtpFailedAttempts, 0);
 
         // Gửi email OTP
         await emailService.SendOtpEmailAsync(model.Email.Trim(), model.FullName.Trim(), otpCode);
@@ -157,9 +163,20 @@ public class AccountController(IAccountService accountService, IEmailService ema
             return View(model);
         }
 
+        var failedAttempts = HttpContext.Session.GetInt32(SessionRegistrationOtpFailedAttempts) ?? 0;
         if (!string.Equals(model.OtpCode.Trim(), expectedOtp.Trim(), StringComparison.Ordinal))
         {
-            ModelState.AddModelError("OtpCode", "Mã xác thực không chính xác. Vui lòng thử lại.");
+            failedAttempts++;
+            HttpContext.Session.SetInt32(SessionRegistrationOtpFailedAttempts, failedAttempts);
+            var remaining = MaxOtpAttempts - failedAttempts;
+            if (remaining <= 0)
+            {
+                ClearRegistrationSession();
+                TempData["ErrorMessage"] = "Bạn đã nhập sai mã xác thực quá 5 lần. Vui lòng thực hiện đăng ký lại từ đầu.";
+                return RedirectToAction(nameof(Register));
+            }
+
+            ModelState.AddModelError("OtpCode", $"Mã xác thực không chính xác. Bạn còn {remaining} lần thử.");
             return View(model);
         }
 
@@ -177,11 +194,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
             return View(model);
         }
 
-        // Xóa sạch dữ liệu đăng ký tạm thời khỏi Session
-        HttpContext.Session.Remove(SessionPendingRegistration);
-        HttpContext.Session.Remove(SessionRegistrationOtp);
-        HttpContext.Session.Remove(SessionRegistrationOtpExpiry);
-        HttpContext.Session.Remove(SessionRegistrationEmail);
+        ClearRegistrationSession();
 
         TempData["SuccessMessage"] = "Xác thực email và tạo tài khoản thành công! Bạn có thể đăng nhập ngay.";
         return RedirectToAction("Login", "Account");
@@ -208,6 +221,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
         var newOtp = Random.Shared.Next(100000, 999999).ToString();
         HttpContext.Session.SetString(SessionRegistrationOtp, newOtp);
         HttpContext.Session.SetString(SessionRegistrationOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+        HttpContext.Session.SetInt32(SessionRegistrationOtpFailedAttempts, 0);
 
         await emailService.SendOtpEmailAsync(registerModel.Email.Trim(), registerModel.FullName.Trim(), newOtp);
 
@@ -220,7 +234,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
         return RedirectToAction(nameof(VerifyEmail));
     }
 
-    // GET: /Account/ForgotPassword
+    // GET: /Account/ForgotPassword (Bước 1: Nhập email tài khoản)
     [HttpGet]
     public IActionResult ForgotPassword()
     {
@@ -232,7 +246,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
         return View(new ForgotPasswordViewModel());
     }
 
-    // POST: /Account/ForgotPassword
+    // POST: /Account/ForgotPassword (Bước 1: Kiểm tra email và gửi OTP)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
@@ -258,6 +272,8 @@ public class AccountController(IAccountService accountService, IEmailService ema
         HttpContext.Session.SetString(SessionResetFullName, recipient.FullName);
         HttpContext.Session.SetString(SessionResetOtp, otpCode);
         HttpContext.Session.SetString(SessionResetOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+        HttpContext.Session.SetInt32(SessionResetOtpFailedAttempts, 0);
+        HttpContext.Session.Remove(SessionResetOtpVerified);
 
         await emailService.SendPasswordResetOtpEmailAsync(recipient.Email, recipient.FullName, otpCode);
 
@@ -267,12 +283,12 @@ public class AccountController(IAccountService accountService, IEmailService ema
         }
 
         TempData["SuccessMessage"] = $"Mã xác thực đã được gửi tới email {recipient.Email}.";
-        return RedirectToAction(nameof(ResetPassword));
+        return RedirectToAction(nameof(VerifyResetOtp));
     }
 
-    // GET: /Account/ResetPassword
+    // GET: /Account/VerifyResetOtp (Bước 2: Form nhập mã xác thực OTP khôi phục mật khẩu)
     [HttpGet]
-    public IActionResult ResetPassword()
+    public IActionResult VerifyResetOtp()
     {
         var email = HttpContext.Session.GetString(SessionResetEmail);
         var expectedOtp = HttpContext.Session.GetString(SessionResetOtp);
@@ -283,13 +299,13 @@ public class AccountController(IAccountService accountService, IEmailService ema
             return RedirectToAction(nameof(ForgotPassword));
         }
 
-        return View(new ResetPasswordViewModel { Email = email });
+        return View(new VerifyResetOtpViewModel { Email = email });
     }
 
-    // POST: /Account/ResetPassword
+    // POST: /Account/VerifyResetOtp (Bước 2: Xác thực mã OTP)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+    public IActionResult VerifyResetOtp(VerifyResetOtpViewModel model)
     {
         var userId = HttpContext.Session.GetInt32(SessionResetUserId);
         var email = HttpContext.Session.GetString(SessionResetEmail);
@@ -314,9 +330,66 @@ public class AccountController(IAccountService accountService, IEmailService ema
             return View(model);
         }
 
+        var failedAttempts = HttpContext.Session.GetInt32(SessionResetOtpFailedAttempts) ?? 0;
         if (!string.Equals(model.OtpCode.Trim(), expectedOtp.Trim(), StringComparison.Ordinal))
         {
-            ModelState.AddModelError("OtpCode", "Mã xác thực không chính xác. Vui lòng thử lại.");
+            failedAttempts++;
+            HttpContext.Session.SetInt32(SessionResetOtpFailedAttempts, failedAttempts);
+            var remaining = MaxOtpAttempts - failedAttempts;
+            if (remaining <= 0)
+            {
+                ClearResetPasswordSession();
+                TempData["ErrorMessage"] = "Bạn đã nhập sai mã xác thực quá 5 lần. Vui lòng thực hiện lại yêu cầu khôi phục.";
+                return RedirectToAction(nameof(ForgotPassword));
+            }
+
+            ModelState.AddModelError("OtpCode", $"Mã xác thực không chính xác. Bạn còn {remaining} lần thử.");
+            return View(model);
+        }
+
+        // Đánh dấu đã xác thực OTP thành công, hủy mã OTP vừa dùng
+        HttpContext.Session.SetString(SessionResetOtpVerified, "true");
+        HttpContext.Session.Remove(SessionResetOtp);
+
+        TempData["SuccessMessage"] = "Xác thực OTP thành công! Vui lòng thiết lập mật khẩu mới.";
+        return RedirectToAction(nameof(ResetPassword));
+    }
+
+    // GET: /Account/ResetPassword (Bước 3: Form nhập mật khẩu mới)
+    [HttpGet]
+    public IActionResult ResetPassword()
+    {
+        var userId = HttpContext.Session.GetInt32(SessionResetUserId);
+        var isVerified = HttpContext.Session.GetString(SessionResetOtpVerified);
+        var email = HttpContext.Session.GetString(SessionResetEmail);
+
+        if (!userId.HasValue || isVerified != "true")
+        {
+            TempData["ErrorMessage"] = "Vui lòng xác thực mã OTP trước khi đặt lại mật khẩu.";
+            return RedirectToAction(nameof(ForgotPassword));
+        }
+
+        return View(new ResetPasswordViewModel { Email = email });
+    }
+
+    // POST: /Account/ResetPassword (Bước 3: Lưu mật khẩu mới)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+    {
+        var userId = HttpContext.Session.GetInt32(SessionResetUserId);
+        var isVerified = HttpContext.Session.GetString(SessionResetOtpVerified);
+        var email = HttpContext.Session.GetString(SessionResetEmail);
+        model.Email = email;
+
+        if (!userId.HasValue || isVerified != "true")
+        {
+            TempData["ErrorMessage"] = "Phiên khôi phục mật khẩu đã hết hạn. Vui lòng thực hiện lại từ đầu.";
+            return RedirectToAction(nameof(ForgotPassword));
+        }
+
+        if (!ModelState.IsValid)
+        {
             return View(model);
         }
 
@@ -327,18 +400,14 @@ public class AccountController(IAccountService accountService, IEmailService ema
             return View(model);
         }
 
-        // Xóa Session khôi phục mật khẩu
-        HttpContext.Session.Remove(SessionResetUserId);
-        HttpContext.Session.Remove(SessionResetEmail);
-        HttpContext.Session.Remove(SessionResetFullName);
-        HttpContext.Session.Remove(SessionResetOtp);
-        HttpContext.Session.Remove(SessionResetOtpExpiry);
+        // Xóa sạch toàn bộ Session khôi phục mật khẩu
+        ClearResetPasswordSession();
 
         TempData["SuccessMessage"] = "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.";
         return RedirectToAction(nameof(Login));
     }
 
-    // POST: /Account/ResendResetOtp
+    // POST: /Account/ResendResetOtp (Gửi lại mã OTP khôi phục)
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ResendResetOtp()
@@ -355,6 +424,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
         var newOtp = Random.Shared.Next(100000, 999999).ToString();
         HttpContext.Session.SetString(SessionResetOtp, newOtp);
         HttpContext.Session.SetString(SessionResetOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+        HttpContext.Session.SetInt32(SessionResetOtpFailedAttempts, 0);
 
         await emailService.SendPasswordResetOtpEmailAsync(email, fullName, newOtp);
 
@@ -364,7 +434,7 @@ public class AccountController(IAccountService accountService, IEmailService ema
         }
 
         TempData["SuccessMessage"] = $"Đã gửi mã xác thực mới tới email {email}.";
-        return RedirectToAction(nameof(ResetPassword));
+        return RedirectToAction(nameof(VerifyResetOtp));
     }
 
     // POST: /Account/Logout (UC-02 - Đăng xuất xóa Session)
@@ -484,6 +554,26 @@ public class AccountController(IAccountService accountService, IEmailService ema
         {
             ModelState.AddModelError(error.Field, error.Message);
         }
+    }
+
+    private void ClearRegistrationSession()
+    {
+        HttpContext.Session.Remove(SessionPendingRegistration);
+        HttpContext.Session.Remove(SessionRegistrationOtp);
+        HttpContext.Session.Remove(SessionRegistrationOtpExpiry);
+        HttpContext.Session.Remove(SessionRegistrationEmail);
+        HttpContext.Session.Remove(SessionRegistrationOtpFailedAttempts);
+    }
+
+    private void ClearResetPasswordSession()
+    {
+        HttpContext.Session.Remove(SessionResetUserId);
+        HttpContext.Session.Remove(SessionResetEmail);
+        HttpContext.Session.Remove(SessionResetFullName);
+        HttpContext.Session.Remove(SessionResetOtp);
+        HttpContext.Session.Remove(SessionResetOtpExpiry);
+        HttpContext.Session.Remove(SessionResetOtpFailedAttempts);
+        HttpContext.Session.Remove(SessionResetOtpVerified);
     }
 
     private IActionResult RedirectToLocal(string? returnUrl, string? role = null)
