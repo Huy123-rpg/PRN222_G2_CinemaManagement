@@ -18,7 +18,10 @@
             </div>
 
             <div class="mb-3">
-                <label asp-for="Password" class="form-label">Mật khẩu</label>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label asp-for="Password" class="form-label mb-0">Mật khẩu</label>
+                    <a asp-action="ForgotPassword" class="small text-decoration-none">Quên mật khẩu?</a>
+                </div>
                 <input asp-for="Password" class="form-control" />
                 <span asp-validation-for="Password" class="text-danger small"></span>
             </div>

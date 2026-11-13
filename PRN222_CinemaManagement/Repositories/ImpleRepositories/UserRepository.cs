@@ -22,6 +22,13 @@ public class UserRepository(CinemaDbContext context) : IUserRepository
             .FirstOrDefaultAsync(u => u.Username == username);
     }
 
+    public async Task<User?> GetByEmailAsync(string email)
+    {
+        return await context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Email == email);
+    }
+
     public async Task<User?> GetByIdWithDetailsAsync(int userId)
     {
         return await context.Users

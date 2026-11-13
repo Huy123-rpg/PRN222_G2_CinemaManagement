@@ -29,7 +29,7 @@ public class VnPayService(IConfiguration config) : IVnPayService
             { "vnp_OrderType", "other" },
             { "vnp_ReturnUrl", vnp_ReturnUrl! },
             { "vnp_TxnRef", bookingId.ToString() }, 
-            { "vnp_ExpireDate", DateTime.Now.AddMinutes(1).ToString("yyyyMMddHHmmss") }
+            { "vnp_ExpireDate", DateTime.Now.AddMinutes(15).ToString("yyyyMMddHHmmss") }
         };
 
         // 1. Tạo chuỗi ĐÃ MÃ HÓA URL (Dùng WebUtility.UrlEncode)

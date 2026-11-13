@@ -9,6 +9,7 @@ public interface IUserRepository
 {
     Task<User?> GetByIdAsync(int userId);
     Task<User?> GetByUsernameWithRoleAsync(string username);
+    Task<User?> GetByEmailAsync(string email);
     Task<User?> GetByIdWithDetailsAsync(int userId);
     Task<List<User>> GetEmployeesAsync(string? searchKeyword, string? roleFilter, string? statusFilter);
     Task<bool> ExistsByUsernameAsync(string username);

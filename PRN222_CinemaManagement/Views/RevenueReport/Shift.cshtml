@@ -1,6 +1,6 @@
 @model IEnumerable<PRN222_CinemaManagement.Models.Entities.Payment>
 @{
-    ViewData["Title"] = "Báo cáo doanh thu theo ca (UC-29)";
+    ViewData["Title"] = "Báo cáo doanh thu theo ca";
     var concessionSales = ViewBag.ConcessionSales as List<PRN222_CinemaManagement.Models.Entities.ConcessionSale> ?? new();
     var staffList = ViewBag.StaffList as List<PRN222_CinemaManagement.Models.Entities.Staff> ?? new();
     int? selectedStaffId = ViewBag.SelectedStaffId as int?;

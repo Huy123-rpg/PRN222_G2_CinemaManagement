@@ -212,4 +212,36 @@ public class VerifyEmailViewModel
     public string? Email { get; set; }
 }
 
+public class ForgotPasswordViewModel
+{
+    [Required(ErrorMessage = "Vui lòng nhập email tài khoản của bạn")]
+    [EmailAddress(ErrorMessage = "Định dạng email không hợp lệ")]
+    [Display(Name = "Email tài khoản")]
+    public string Email { get; set; } = string.Empty;
+}
+
+public class ResetPasswordViewModel
+{
+    public string? Email { get; set; }
+
+    [Required(ErrorMessage = "Vui lòng nhập mã xác thực OTP")]
+    [StringLength(6, MinimumLength = 6, ErrorMessage = "Mã xác thực gồm 6 chữ số")]
+    [RegularExpression(@"^[0-9]{6}$", ErrorMessage = "Mã xác thực chỉ chứa 6 chữ số")]
+    [Display(Name = "Mã xác thực (OTP)")]
+    public string OtpCode { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Vui lòng nhập mật khẩu mới")]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu mới tối thiểu 6 ký tự")]
+    [DataType(DataType.Password)]
+    [Display(Name = "Mật khẩu mới")]
+    public string NewPassword { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Vui lòng xác nhận mật khẩu mới")]
+    [DataType(DataType.Password)]
+    [Compare("NewPassword", ErrorMessage = "Mật khẩu xác nhận không khớp")]
+    [Display(Name = "Xác nhận mật khẩu mới")]
+    public string ConfirmNewPassword { get; set; } = string.Empty;
+}
+
+
 

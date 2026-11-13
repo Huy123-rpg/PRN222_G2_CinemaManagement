@@ -13,6 +13,12 @@ public class AccountController(IAccountService accountService, IEmailService ema
     private const string SessionRegistrationOtpExpiry = "RegistrationOtpExpiry";
     private const string SessionRegistrationEmail = "RegistrationEmail";
 
+    private const string SessionResetUserId = "ResetPasswordUserId";
+    private const string SessionResetEmail = "ResetPasswordEmail";
+    private const string SessionResetFullName = "ResetPasswordFullName";
+    private const string SessionResetOtp = "ResetPasswordOtp";
+    private const string SessionResetOtpExpiry = "ResetPasswordOtpExpiry";
+
     // GET: /Account/Login
     [HttpGet]
     public IActionResult Login(string? returnUrl = null)
@@ -212,6 +218,153 @@ public class AccountController(IAccountService accountService, IEmailService ema
 
         TempData["SuccessMessage"] = $"Đã gửi mã xác thực mới tới email {registerModel.Email}.";
         return RedirectToAction(nameof(VerifyEmail));
+    }
+
+    // GET: /Account/ForgotPassword
+    [HttpGet]
+    public IActionResult ForgotPassword()
+    {
+        if (!string.IsNullOrEmpty(HttpContext.Session.GetString("Username")))
+        {
+            return RedirectToAction("Index", "Home");
+        }
+
+        return View(new ForgotPasswordViewModel());
+    }
+
+    // POST: /Account/ForgotPassword
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var validationResult = await accountService.ValidateForgotPasswordAsync(model.Email);
+        if (!validationResult.Succeeded)
+        {
+            AddErrorsToModelState(validationResult);
+            return View(model);
+        }
+
+        var recipient = validationResult.Data!;
+        var otpCode = Random.Shared.Next(100000, 999999).ToString();
+
+        // Lưu thông tin khôi phục vào Session (hiệu lực 5 phút)
+        HttpContext.Session.SetInt32(SessionResetUserId, recipient.UserId);
+        HttpContext.Session.SetString(SessionResetEmail, recipient.Email);
+        HttpContext.Session.SetString(SessionResetFullName, recipient.FullName);
+        HttpContext.Session.SetString(SessionResetOtp, otpCode);
+        HttpContext.Session.SetString(SessionResetOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+
+        await emailService.SendPasswordResetOtpEmailAsync(recipient.Email, recipient.FullName, otpCode);
+
+        if (!emailService.IsSmtpConfigured())
+        {
+            TempData["DemoOtp"] = otpCode;
+        }
+
+        TempData["SuccessMessage"] = $"Mã xác thực đã được gửi tới email {recipient.Email}.";
+        return RedirectToAction(nameof(ResetPassword));
+    }
+
+    // GET: /Account/ResetPassword
+    [HttpGet]
+    public IActionResult ResetPassword()
+    {
+        var email = HttpContext.Session.GetString(SessionResetEmail);
+        var expectedOtp = HttpContext.Session.GetString(SessionResetOtp);
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(expectedOtp))
+        {
+            TempData["ErrorMessage"] = "Không tìm thấy yêu cầu đặt lại mật khẩu. Vui lòng thực hiện lại.";
+            return RedirectToAction(nameof(ForgotPassword));
+        }
+
+        return View(new ResetPasswordViewModel { Email = email });
+    }
+
+    // POST: /Account/ResetPassword
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+    {
+        var userId = HttpContext.Session.GetInt32(SessionResetUserId);
+        var email = HttpContext.Session.GetString(SessionResetEmail);
+        var expectedOtp = HttpContext.Session.GetString(SessionResetOtp);
+        var expiryStr = HttpContext.Session.GetString(SessionResetOtpExpiry);
+        model.Email = email;
+
+        if (!userId.HasValue || string.IsNullOrEmpty(expectedOtp) || string.IsNullOrEmpty(expiryStr))
+        {
+            TempData["ErrorMessage"] = "Phiên khôi phục mật khẩu đã hết hạn. Vui lòng thực hiện lại.";
+            return RedirectToAction(nameof(ForgotPassword));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        if (!DateTime.TryParse(expiryStr, out var expiry) || DateTime.UtcNow > expiry)
+        {
+            ModelState.AddModelError("OtpCode", "Mã xác thực đã hết hạn (quá 5 phút). Vui lòng nhấn 'Gửi lại mã'.");
+            return View(model);
+        }
+
+        if (!string.Equals(model.OtpCode.Trim(), expectedOtp.Trim(), StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("OtpCode", "Mã xác thực không chính xác. Vui lòng thử lại.");
+            return View(model);
+        }
+
+        var result = await accountService.ResetPasswordWithOtpAsync(userId.Value, model.NewPassword);
+        if (!result.Succeeded)
+        {
+            AddErrorsToModelState(result);
+            return View(model);
+        }
+
+        // Xóa Session khôi phục mật khẩu
+        HttpContext.Session.Remove(SessionResetUserId);
+        HttpContext.Session.Remove(SessionResetEmail);
+        HttpContext.Session.Remove(SessionResetFullName);
+        HttpContext.Session.Remove(SessionResetOtp);
+        HttpContext.Session.Remove(SessionResetOtpExpiry);
+
+        TempData["SuccessMessage"] = "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.";
+        return RedirectToAction(nameof(Login));
+    }
+
+    // POST: /Account/ResendResetOtp
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResendResetOtp()
+    {
+        var email = HttpContext.Session.GetString(SessionResetEmail);
+        var fullName = HttpContext.Session.GetString(SessionResetFullName);
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(fullName))
+        {
+            TempData["ErrorMessage"] = "Phiên xác thực đã hết hạn. Vui lòng thực hiện lại từ đầu.";
+            return RedirectToAction(nameof(ForgotPassword));
+        }
+
+        var newOtp = Random.Shared.Next(100000, 999999).ToString();
+        HttpContext.Session.SetString(SessionResetOtp, newOtp);
+        HttpContext.Session.SetString(SessionResetOtpExpiry, DateTime.UtcNow.AddMinutes(5).ToString("O"));
+
+        await emailService.SendPasswordResetOtpEmailAsync(email, fullName, newOtp);
+
+        if (!emailService.IsSmtpConfigured())
+        {
+            TempData["DemoOtp"] = newOtp;
+        }
+
+        TempData["SuccessMessage"] = $"Đã gửi mã xác thực mới tới email {email}.";
+        return RedirectToAction(nameof(ResetPassword));
     }
 
     // POST: /Account/Logout (UC-02 - Đăng xuất xóa Session)

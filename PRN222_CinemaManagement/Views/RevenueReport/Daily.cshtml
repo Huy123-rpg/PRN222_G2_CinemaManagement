@@ -1,6 +1,6 @@
 @model IEnumerable<PRN222_CinemaManagement.Models.Entities.Payment>
 @{
-    ViewData["Title"] = "Báo cáo doanh thu theo ngày (UC-28)";
+    ViewData["Title"] = "Báo cáo doanh thu theo ngày";
     var concessionSales = ViewBag.ConcessionSales as List<PRN222_CinemaManagement.Models.Entities.ConcessionSale> ?? new();
     string selectedDate = ViewBag.SelectedDate ?? "";
     string displayDate = ViewBag.DisplayDate ?? "";

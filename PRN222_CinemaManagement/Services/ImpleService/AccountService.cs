@@ -190,4 +190,46 @@ public class AccountService(
 
         return ServiceResult.Success();
     }
+
+    public async Task<ServiceResult<PasswordResetRecipient>> ValidateForgotPasswordAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return ServiceResult<PasswordResetRecipient>.Fail("Email", "Vui lòng nhập địa chỉ email.");
+        }
+
+        var user = await userRepository.GetByEmailAsync(email.Trim());
+        if (user == null)
+        {
+            return ServiceResult<PasswordResetRecipient>.Fail("Email", "Không tìm thấy tài khoản nào liên kết với email này.");
+        }
+
+        if (user.Status != "Active")
+        {
+            return ServiceResult<PasswordResetRecipient>.Fail("Email", "Tài khoản này đang bị khóa hoặc không hoạt động. Vui lòng liên hệ Admin.");
+        }
+
+        return ServiceResult<PasswordResetRecipient>.Success(
+            new PasswordResetRecipient(user.UserId, user.FullName, user.Email));
+    }
+
+    public async Task<ServiceResult> ResetPasswordWithOtpAsync(int userId, string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+        {
+            return ServiceResult.Fail("NewPassword", "Mật khẩu mới tối thiểu 6 ký tự.");
+        }
+
+        var user = await userRepository.GetByIdAsync(userId);
+        if (user == null)
+        {
+            return ServiceResult.NotFound();
+        }
+
+        user.PasswordHash = passwordService.HashPassword(newPassword);
+        await userRepository.SaveChangesAsync();
+
+        return ServiceResult.Success("Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.");
+    }
 }
+

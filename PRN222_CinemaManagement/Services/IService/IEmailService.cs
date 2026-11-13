@@ -6,5 +6,6 @@ namespace PRN222_CinemaManagement.Services.IService;
 public interface IEmailService
 {
     Task<bool> SendOtpEmailAsync(string toEmail, string fullName, string otpCode, CancellationToken ct = default);
+    Task<bool> SendPasswordResetOtpEmailAsync(string toEmail, string fullName, string otpCode, CancellationToken ct = default);
     bool IsSmtpConfigured();
 }
